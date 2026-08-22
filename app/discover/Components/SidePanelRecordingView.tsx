@@ -11,6 +11,7 @@ import MuxPlayer from '@mux/mux-player-react';
 import MuxPlayerElement from '@mux/mux-player';
 import { useChatStore } from '@/app/stores/useChatStore';
 import { Citation } from '@/types/chat';
+import { CitationExhibitView } from './CitationExhibitView';
 import { colors } from '@/lib/theme';
 import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { CitationBadge, GroupedSourcesView, NumberedSourcesView } from './recording/RecordingSourcesViews';
@@ -32,7 +33,8 @@ export const SidePanelRecordingView = () => {
 
   // Sync video time when active citation changes
   useEffect(() => {
-    if (videoRef.current && activeCitation) {
+    const isExhibit = activeCitation?.sourceType === 'document' || activeCitation?.sourceType === 'image';
+    if (videoRef.current && activeCitation && !isExhibit) {
       videoRef.current.currentTime = activeCitation.startTime;
     }
   }, [activeCitation]);
@@ -57,6 +59,9 @@ export const SidePanelRecordingView = () => {
   }, [activeCitationSiblings, filterTerm]);
 
   if (!activeCitation) return null;
+
+  // Documents and images have no timeline and no player; they render as a page instead.
+  const isExhibitCitation = activeCitation.sourceType === 'document' || activeCitation.sourceType === 'image';
 
   const accentColor = activeCitation.isChapterSynopsis ? CHAPTER_COLOR : CLIP_COLOR;
 
@@ -92,18 +97,22 @@ export const SidePanelRecordingView = () => {
         ) : null}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-          <Box sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: colors.common.black }}>
-            <MuxPlayer
-              ref={videoRef}
-              src={activeCitation.videoUrl}
-              audio={activeCitation.isAudioFile}
-              startTime={activeCitation.startTime}
-              forwardSeekOffset={10}
-              backwardSeekOffset={10}
-              accentColor={muxPlayerThemeProps.accentColor}
-              style={{ ...muxPlayerThemeProps.style, aspectRatio: activeCitation.isAudioFile ? 'auto' : '16/9' }}
-            />
-          </Box>
+          {isExhibitCitation ? (
+            <CitationExhibitView citation={activeCitation} />
+          ) : (
+            <Box sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: colors.common.black }}>
+              <MuxPlayer
+                ref={videoRef}
+                src={activeCitation.videoUrl}
+                audio={activeCitation.isAudioFile}
+                startTime={activeCitation.startTime}
+                forwardSeekOffset={10}
+                backwardSeekOffset={10}
+                accentColor={muxPlayerThemeProps.accentColor}
+                style={{ ...muxPlayerThemeProps.style, aspectRatio: activeCitation.isAudioFile ? 'auto' : '16/9' }}
+              />
+            </Box>
+          )}
 
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
@@ -113,7 +122,7 @@ export const SidePanelRecordingView = () => {
               </Typography>
             </Box>
             <Typography variant="caption" color="text.secondary">
-              {activeCitation.isChapterSynopsis ? (
+              {isExhibitCitation ? null : activeCitation.isChapterSynopsis ? (
                 <>
                   Chapter Summary &middot; {activeCitation.sectionTitle} &middot; {formatTime(activeCitation.startTime)}
                   –{formatTime(activeCitation.endTime)}

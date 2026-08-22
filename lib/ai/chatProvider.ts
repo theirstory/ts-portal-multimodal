@@ -8,11 +8,31 @@ export type ChatProviderMessage = {
   content: string;
 };
 
+/**
+ * A page image sent to the model alongside the question.
+ *
+ * This is what lets Discover answer from a scanned page or a photograph. Most of this
+ * archive's images carry no usable text — six photographs have none at all, and 36 of 88
+ * pages are scans whose only text layer is a source stamp — so describing them in the prompt
+ * would give the model a title and nothing to reason about.
+ */
+export type ChatImageAttachment = {
+  /** The citation number this image belongs to, so the model can cite it correctly. */
+  index: number;
+  /** Base64-encoded image bytes, without a data: prefix. */
+  base64: string;
+  mediaType: 'image/jpeg' | 'image/png';
+  /** Short caption naming the source, so the model knows what it is looking at. */
+  caption: string;
+};
+
 export type ChatProviderRequest = {
   model: string;
   systemPrompt: string;
   messages: ChatProviderMessage[];
   maxTokens: number;
+  /** Ignored by providers that cannot accept images. */
+  images?: ChatImageAttachment[];
 };
 
 export type ChatProviderSettings = {
@@ -24,6 +44,11 @@ export type ChatProviderSettings = {
 
 export type ChatProvider = {
   streamText(input: ChatProviderRequest): AsyncIterable<string>;
+  /**
+   * Whether this provider can accept `images`. Callers should check before spending work
+   * encoding them, and fall back to text so a non-image provider degrades rather than fails.
+   */
+  supportsImages: boolean;
 };
 
 const DEFAULT_MODELS: Record<ChatProviderName, string> = {
@@ -98,12 +123,14 @@ function createAnthropicProvider(settings: ChatProviderSettings): ChatProvider {
   const client = new Anthropic({ apiKey: settings.apiKey });
 
   return {
+    supportsImages: true,
+
     async *streamText(input: ChatProviderRequest) {
       const stream = client.messages.stream({
         model: input.model,
         max_tokens: input.maxTokens,
         system: input.systemPrompt,
-        messages: input.messages,
+        messages: attachImagesToLastUserMessage(input),
       });
 
       for await (const event of stream) {
@@ -117,6 +144,10 @@ function createAnthropicProvider(settings: ChatProviderSettings): ChatProvider {
 
 function createOpenAICompatibleProvider(settings: ChatProviderSettings): ChatProvider {
   return {
+    // Both OpenAI and most compatible gateways accept image_url parts; a gateway that does
+    // not will ignore them, and the prompt still carries each page's text.
+    supportsImages: true,
+
     async *streamText(input: ChatProviderRequest) {
       const response = await fetch(`${settings.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -128,7 +159,10 @@ function createOpenAICompatibleProvider(settings: ChatProviderSettings): ChatPro
           model: input.model,
           stream: true,
           max_tokens: input.maxTokens,
-          messages: [{ role: 'system', content: input.systemPrompt }, ...input.messages],
+          messages: [
+            { role: 'system', content: input.systemPrompt },
+            ...toOpenAIMessages(input),
+          ],
         }),
       });
 
@@ -144,6 +178,66 @@ function createOpenAICompatibleProvider(settings: ChatProviderSettings): ChatPro
       yield* readOpenAICompatibleTextStream(response.body);
     },
   };
+}
+
+/**
+ * Images ride on the last user message rather than the system prompt, because that is the
+ * turn they are evidence for, and both APIs expect them there.
+ */
+function attachImagesToLastUserMessage(input: ChatProviderRequest) {
+  const messages = input.messages;
+  const images = input.images ?? [];
+
+  if (!images.length) return messages;
+
+  const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
+  if (lastUserIndex < 0) return messages;
+
+  return messages.map((message, index) => {
+    if (index !== lastUserIndex) return message;
+
+    return {
+      role: message.role,
+      content: [
+        { type: 'text' as const, text: message.content },
+        ...images.flatMap((image) => [
+          { type: 'text' as const, text: `Source [${image.index}] — ${image.caption}:` },
+          {
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: image.mediaType, data: image.base64 },
+          },
+        ]),
+      ],
+    };
+  }) as unknown as ChatProviderMessage[];
+}
+
+function toOpenAIMessages(input: ChatProviderRequest) {
+  const messages = input.messages;
+  const images = input.images ?? [];
+
+  if (!images.length) return messages;
+
+  const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
+  if (lastUserIndex < 0) return messages;
+
+  return messages.map((message, index) => {
+    if (index !== lastUserIndex) return message;
+
+    return {
+      role: message.role,
+      content: [
+        { type: 'text', text: message.content },
+        ...images.flatMap((image) => [
+          { type: 'text', text: `Source [${image.index}] — ${image.caption}:` },
+          {
+            type: 'image_url',
+            image_url: { url: `data:${image.mediaType};base64,${image.base64}` },
+          },
+        ]),
+      ],
+    };
+  }) as unknown as ChatProviderMessage[];
 }
 
 async function* readOpenAICompatibleTextStream(stream: ReadableStream<Uint8Array>): AsyncIterable<string> {

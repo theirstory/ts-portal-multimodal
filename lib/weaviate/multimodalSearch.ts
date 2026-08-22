@@ -31,11 +31,14 @@ export type SourceType = 'recording' | 'document' | 'image';
  * all. 'keyword' is BM25 over the indexed text, so it finds the exact terms and nothing
  * else, which is what you want for a name, a drug, or an acronym like DEA.
  *
- * Hybrid is deliberately absent: benchmarking on this portal's multilingual corpus showed
- * equal-weight fusion dropping cross-lingual recall from 0.875 to 0.000, because the keyword
- * retriever votes with confidence when it is out of its depth.
+ * 'hybrid' fuses the two. It is offered for Discover, which has always used it, but it is
+ * deliberately *not* the default and not offered in the search UI: benchmarking on this
+ * portal's multilingual corpus showed equal-weight fusion dropping cross-lingual recall from
+ * 0.875 to 0.000, because the keyword retriever votes with confidence when it is out of its
+ * depth. Weaviate's `alpha` lets the vector side dominate, which contains but does not
+ * remove the effect — every unit of keyword weight costs cross-lingual recall.
  */
-export type SearchMode = 'semantic' | 'keyword';
+export type SearchMode = 'semantic' | 'keyword' | 'hybrid';
 
 export type MultimodalResult = {
   /** Stable Weaviate object id. */
@@ -133,6 +136,11 @@ export type MultimodalSearchOptions = {
   limit?: number;
   /** Defaults to 'semantic'. */
   mode?: SearchMode;
+  /**
+   * Vector weight for hybrid mode: 1 is pure vector, 0 pure keyword. Defaults to the 0.55
+   * Discover has used, which leans slightly toward meaning over exact terms.
+   */
+  hybridAlpha?: number;
   /** Restrict to a subset of source types. Defaults to all of them. */
   sourceTypes?: SourceType[];
   collectionFilters?: string[];
@@ -550,6 +558,7 @@ export async function multimodalSearch(
 ): Promise<{ results: MultimodalResult[]; perTypeCounts: Record<SourceType, number>; mode: SearchMode }> {
   const limit = options.limit ?? 30;
   const mode: SearchMode = options.mode ?? 'semantic';
+  const hybridAlpha = options.hybridAlpha ?? 0.55;
   const sourceTypes = options.sourceTypes?.length ? options.sourceTypes : (['recording', 'document', 'image'] as SourceType[]);
   const weights = { ...DEFAULT_WEIGHTS, ...options.weights };
   const offsets = { ...DEFAULT_CALIBRATION_OFFSETS, ...options.calibrationOffsets };
@@ -560,7 +569,7 @@ export async function multimodalSearch(
   const candidateLimit = Math.max(limit * CANDIDATE_MULTIPLIER, MIN_CANDIDATE_POOL);
 
   // Keyword mode needs no embedding at all, which also makes it markedly faster.
-  const vector = mode === 'semantic' ? await getLocalEmbedding(query) : null;
+  const vector = mode === 'keyword' ? null : await getLocalEmbedding(query);
 
   const wantsRecordings = sourceTypes.includes('recording');
   const wantsExhibits = sourceTypes.includes('document') || sourceTypes.includes('image');
@@ -573,6 +582,19 @@ export async function multimodalSearch(
 
           if (mode === 'keyword') {
             return collection.query.bm25(query, {
+              limit: candidateLimit,
+              returnMetadata: ['score'],
+              returnProperties: CHUNK_RETURN_PROPERTIES,
+              filters,
+            });
+          }
+
+          if (mode === 'hybrid') {
+            return collection.query.hybrid(query, {
+              vector: vector as number[],
+              alpha: hybridAlpha,
+              fusionType: 'RelativeScore',
+              targetVector: 'transcription_vector',
               limit: candidateLimit,
               returnMetadata: ['score'],
               returnProperties: CHUNK_RETURN_PROPERTIES,
@@ -611,6 +633,19 @@ export async function multimodalSearch(
             });
           }
 
+          if (mode === 'hybrid') {
+            return collection.query.hybrid(query, {
+              vector: vector as number[],
+              alpha: hybridAlpha,
+              fusionType: 'RelativeScore',
+              targetVector: 'content_vector',
+              limit: candidateLimit,
+              returnMetadata: ['score'],
+              returnProperties: EXHIBIT_RETURN_PROPERTIES,
+              filters,
+            });
+          }
+
           return collection.query.nearVector(vector as number[], {
             limit: candidateLimit,
             targetVector: 'content_vector',
@@ -628,7 +663,8 @@ export async function multimodalSearch(
     const properties = object.properties as Chunks;
     const certainty = object.metadata?.certainty ?? 0;
     const bm25Score = object.metadata?.score ?? 0;
-    // Certainty floors describe a cosine scale, so they mean nothing to BM25.
+    // Certainty floors describe a cosine scale, so they mean nothing to BM25 or to a fused
+    // hybrid score.
     if (mode === 'semantic' && certainty < minCertainty.recording) continue;
 
     staged.push({
@@ -640,7 +676,7 @@ export async function multimodalSearch(
         snippet: snippet(properties.transcription ?? ''),
         certainty,
         mode,
-        score: mode === 'keyword' ? bm25Score : 0,
+        score: mode === 'semantic' ? 0 : bm25Score,
         collectionId: properties.collection_id ?? '',
         collectionName: properties.collection_name ?? '',
         folderId: properties.folder_id ?? '',
@@ -677,7 +713,7 @@ export async function multimodalSearch(
         snippet: snippet(usableText(properties.ocr_text) || properties.description || ''),
         certainty,
         mode,
-        score: mode === 'keyword' ? bm25Score : 0,
+        score: mode === 'semantic' ? 0 : bm25Score,
         collectionId: properties.collection_id ?? '',
         collectionName: properties.collection_name ?? '',
         folderId: properties.folder_id ?? '',
@@ -704,9 +740,9 @@ export async function multimodalSearch(
     perTypeCounts[sourceType] = group.length;
 
     for (const entry of group) {
-      // BM25 relevance is already a single comparable scale across types, and calibration
-      // offsets are a property of the vector space, so keyword scores are left as they are.
-      if (mode === 'keyword') {
+      // BM25 and fused hybrid scores are already on one comparable scale across types, and
+      // the calibration offsets are a property of the vector space, so they are left alone.
+      if (mode !== 'semantic') {
         entry.result.score = entry.result.score * (weights[sourceType] ?? 1);
         continue;
       }

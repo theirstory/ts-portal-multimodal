@@ -31,9 +31,22 @@ export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
   const isHighlighted = hoveredCitationIndex === citation.index &&
     (!activeAssistantMessageId || !messageId || activeAssistantMessageId === messageId);
 
-  const tooltipContent = citation.isChapterSynopsis
-    ? `Chapter Summary — "${citation.interviewTitle}" · ${citation.sectionTitle}`
-    : `${citation.speaker} — "${citation.interviewTitle}" (${formatTime(citation.startTime)})`;
+  const isExhibit = citation.sourceType === 'document' || citation.sourceType === 'image';
+
+  const tooltipContent = isExhibit
+    ? [
+        citation.sourceType === 'image' ? 'Image' : 'Document',
+        `"${citation.interviewTitle}"`,
+        citation.pageCount && citation.pageCount > 1 ? `page ${citation.page} of ${citation.pageCount}` : '',
+        citation.batesNumber ? `Bates ${citation.batesNumber}` : '',
+        // Worth stating: it changes how much weight the claim about this source deserves.
+        citation.imageSentToModel ? 'read as an image' : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : citation.isChapterSynopsis
+      ? `Chapter Summary — "${citation.interviewTitle}" · ${citation.sectionTitle}`
+      : `${citation.speaker} — "${citation.interviewTitle}" (${formatTime(citation.startTime)})`;
 
   return (
     <Tooltip title={tooltipContent} arrow placement="top">
@@ -54,7 +67,15 @@ export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          bgcolor: citation.isChapterSynopsis ? colors.success.main : colors.primary.main,
+          // Colour by source type, matching the accents the unified search page uses, so a
+          // reader can tell at a glance whether a claim rests on testimony or on a document.
+          bgcolor: isExhibit
+            ? citation.sourceType === 'image'
+              ? colors.success.main
+              : colors.info?.main ?? colors.primary.main
+            : citation.isChapterSynopsis
+              ? colors.success.main
+              : colors.primary.main,
           color: colors.primary.contrastText,
           fontSize: '0.7rem',
           fontWeight: 700,
