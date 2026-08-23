@@ -111,11 +111,43 @@ export function MultimodalSearchPage() {
     void search();
   }, [urlQuery, urlMode, setQuery, setMode, search, browse, setTopBarCollapsedAuto]);
 
+  /**
+   * Which `open=` value has already been acted on.
+   *
+   * Closing the drawer clears the state and the URL together, but the router publishes the
+   * new search params a render later — so this effect could still see the old uuid, find it
+   * in the results, and immediately re-open what the reader had just dismissed. It looked
+   * like the backdrop needed two clicks. Remembering what has been handled means a stale
+   * parameter cannot resurrect a closed drawer, while a genuinely different uuid still opens.
+   */
+  const handledOpenRef = React.useRef('');
+
   React.useEffect(() => {
-    if (!urlOpen || selectedResult?.uuid === urlOpen) return;
+    if (!urlOpen) {
+      handledOpenRef.current = '';
+      return;
+    }
+    if (handledOpenRef.current === urlOpen) return;
+
+    if (selectedResult?.uuid === urlOpen) {
+      handledOpenRef.current = urlOpen;
+      return;
+    }
+
     const match = results.find((result) => result.uuid === urlOpen);
-    if (match) setSelectedResult(match);
+    if (match) {
+      handledOpenRef.current = urlOpen;
+      setSelectedResult(match);
+    }
   }, [urlOpen, results, selectedResult, setSelectedResult]);
+
+  // Both drawers close the same way; keeping it in one place also keeps the two in step.
+  const closeDetail = React.useCallback(() => {
+    setSelectedResult(null);
+    if (submittedQuery || query) {
+      router.replace(buildUrl(submittedQuery || query, mode), { scroll: false });
+    }
+  }, [buildUrl, mode, query, router, setSelectedResult, submittedQuery]);
 
   const resultsByType = React.useMemo(
     () =>
@@ -333,23 +365,13 @@ export function MultimodalSearchPage() {
 
       <RecordingDetailDrawer
         result={selectedResult?.sourceType === 'recording' ? selectedResult : null}
-        onClose={() => {
-          setSelectedResult(null);
-          if (submittedQuery || query) {
-            router.replace(buildUrl(submittedQuery || query, mode), { scroll: false });
-          }
-        }}
+        onClose={closeDetail}
       />
 
       <ExhibitDetailDrawer
         result={selectedResult?.sourceType === 'recording' ? null : selectedResult}
         query={submittedQuery}
-        onClose={() => {
-          setSelectedResult(null);
-          if (submittedQuery || query) {
-            router.replace(buildUrl(submittedQuery || query, mode), { scroll: false });
-          }
-        }}
+        onClose={closeDetail}
       />
     </Box>
   );
