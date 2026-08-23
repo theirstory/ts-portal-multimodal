@@ -10,6 +10,8 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { colors } from '@/lib/theme';
 import { Citation } from '@/types/chat';
+import { useChatStore } from '@/app/stores/useChatStore';
+import { PageImageWithHighlights } from '@/components/multimodal/PageImageWithHighlights';
 
 type Props = { citation: Citation };
 
@@ -25,6 +27,10 @@ type Props = { citation: Citation };
  * having read the image and the model having paraphrased a catalogue title.
  */
 export function CitationExhibitView({ citation }: Props) {
+  // The question that produced this citation is what the page should be marked against —
+  // the same relationship a search query has to a result on the All Sources page.
+  const question = useChatStore((s) => s.activePromptText);
+
   const provenance = [
     citation.batesNumber ? `Bates ${citation.batesNumber}` : '',
     citation.exhibitNumber || '',
@@ -51,21 +57,14 @@ export function CitationExhibitView({ citation }: Props) {
       )}
 
       {citation.imageUrl && (
-        <Box
-          sx={{
-            borderRadius: 2,
-            overflow: 'hidden',
-            border: `1px solid ${colors.grey[200]}`,
-            backgroundColor: colors.grey[100],
-            lineHeight: 0,
-          }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={citation.imageUrl}
-            alt={citation.interviewTitle}
-            style={{ width: '100%', height: 'auto', display: 'block' }}
-          />
-        </Box>
+        <PageImageWithHighlights
+          imageUrl={citation.imageUrl}
+          alt={citation.interviewTitle}
+          query={question}
+          // Discover retrieves with hybrid, which still describes meaning, so the closest
+          // passage is worth locating rather than only marking literal terms.
+          mode="hybrid"
+        />
       )}
 
       <Box>

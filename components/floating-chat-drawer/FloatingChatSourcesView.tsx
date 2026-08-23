@@ -11,9 +11,9 @@ import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import SearchIcon from '@mui/icons-material/Search';
 import { Citation } from '@/types/chat';
 import { colors } from '@/lib/theme';
-import { getMuxPlaybackId } from '@/app/utils/converters';
 import { highlightSearchText } from '@/app/indexes/highlightSearch';
 import { formatTime, groupByRecording } from './helpers';
+import { SourceThumbnail, sourceMetaLabel } from '@/app/discover/Components/recording/sourcePresentation';
 import {
   SourceTypeFilter,
   filterBySourceTypes,
@@ -148,11 +148,6 @@ export function FloatingChatSourcesView({
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {listMode === 'number'
           ? [...filteredCitations].sort((a, b) => a.index - b.index).map((citation) => {
-              const playbackId = getMuxPlaybackId(citation.videoUrl);
-              const thumbnailUrl =
-                playbackId && !citation.isAudioFile
-                  ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop&time=${Math.floor(citation.startTime)}`
-                  : null;
 
               return (
                 <Box
@@ -170,35 +165,7 @@ export function FloatingChatSourcesView({
                     '&:hover': { bgcolor: colors.grey[50] },
                     transition: 'background-color 0.15s',
                   }}>
-                  {thumbnailUrl ? (
-                    <Box
-                      component="img"
-                      src={thumbnailUrl}
-                      alt={citation.interviewTitle}
-                      sx={{
-                        width: 48,
-                        aspectRatio: '16/9',
-                        objectFit: 'cover',
-                        borderRadius: 1,
-                        bgcolor: colors.grey[200],
-                        flexShrink: 0,
-                        alignSelf: 'flex-start',
-                        mt: 0.25,
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      sx={{
-                        width: 48,
-                        aspectRatio: '16/9',
-                        bgcolor: colors.grey[200],
-                        borderRadius: 1,
-                        flexShrink: 0,
-                        alignSelf: 'flex-start',
-                        mt: 0.25,
-                      }}
-                    />
-                  )}
+                  <SourceThumbnail source={citation} alt={citation.interviewTitle} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
                       <Box
@@ -229,7 +196,7 @@ export function FloatingChatSourcesView({
                         )}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                        {formatTime(citation.startTime)}–{formatTime(citation.endTime)}
+                        {sourceMetaLabel(citation, formatTime)}
                       </Typography>
                     </Box>
                     <Typography
@@ -250,11 +217,6 @@ export function FloatingChatSourcesView({
               );
             })
           : groupByRecording(filteredCitations).map((group) => {
-              const playbackId = getMuxPlaybackId(group.videoUrl);
-              const thumbnailUrl =
-                playbackId && !group.isAudioFile
-                  ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop`
-                  : null;
               const isCollapsed = collapsed.has(group.theirstoryId);
 
               return (
@@ -284,31 +246,7 @@ export function FloatingChatSourcesView({
                         flexShrink: 0,
                       }}
                     />
-                    {thumbnailUrl ? (
-                      <Box
-                        component="img"
-                        src={thumbnailUrl}
-                        alt={group.interviewTitle}
-                        sx={{
-                          width: 48,
-                          aspectRatio: '16/9',
-                          objectFit: 'cover',
-                          borderRadius: 1,
-                          bgcolor: colors.grey[200],
-                          flexShrink: 0,
-                        }}
-                      />
-                    ) : (
-                      <Box
-                        sx={{
-                          width: 48,
-                          aspectRatio: '16/9',
-                          bgcolor: colors.grey[200],
-                          borderRadius: 1,
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
+                    <SourceThumbnail source={group} alt={group.interviewTitle} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.3, fontSize: '0.8rem' }}>
                         {highlightSearchText(group.interviewTitle, filterTerm)}
@@ -355,7 +293,7 @@ export function FloatingChatSourcesView({
                             {' · '}
                             {citation.sectionTitle}
                             {' · '}
-                            {formatTime(citation.startTime)}–{formatTime(citation.endTime)}
+                            {sourceMetaLabel(citation, formatTime)}
                           </Typography>
                         </Box>
                         <Typography

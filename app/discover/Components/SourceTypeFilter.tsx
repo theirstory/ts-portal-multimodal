@@ -3,8 +3,9 @@
 import React from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
+import { darken } from '@mui/material/styles';
 import { Citation, CitationSourceType } from '@/types/chat';
-import { SOURCE_TYPE_COLOR, SOURCE_TYPE_LABEL_PLURAL } from '@/lib/theme/sourceTypes';
+import { SOURCE_TYPE_COLOR, SOURCE_TYPE_LABEL_PLURAL, sourceTypeTint } from '@/lib/theme/sourceTypes';
 
 export const SOURCE_TYPE_ORDER: CitationSourceType[] = ['recording', 'document', 'image'];
 
@@ -74,9 +75,24 @@ export function SourceTypeFilter({ citations, active, onToggle }: Props) {
             sx={{
               height: 24,
               fontSize: '0.7rem',
+              // MUI gives a clickable Chip its own hover background, which replaced the
+              // accent and left white text on light grey — the label vanished on hover.
+              // Both states set their own hover explicitly so the label always has contrast.
               ...(isActive
-                ? { backgroundColor: ACCENTS[sourceType], color: '#fff' }
-                : { borderColor: ACCENTS[sourceType], color: ACCENTS[sourceType] }),
+                ? {
+                    backgroundColor: ACCENTS[sourceType],
+                    color: '#fff',
+                    '&:hover': { backgroundColor: darken(ACCENTS[sourceType], 0.18) },
+                    '&:focus-visible': { backgroundColor: darken(ACCENTS[sourceType], 0.18) },
+                  }
+                : {
+                    borderColor: ACCENTS[sourceType],
+                    color: ACCENTS[sourceType],
+                    '&:hover': {
+                      backgroundColor: sourceTypeTint(sourceType, 0.14),
+                      borderColor: ACCENTS[sourceType],
+                    },
+                  }),
             }}
           />
         );
