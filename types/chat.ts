@@ -16,10 +16,22 @@ export type ChatMessage = {
   zoteroItems?: ZoteroContextItem[];
 };
 
+/**
+ * What kind of source a citation points at.
+ *
+ * Discover began as transcript-only, so `Citation` is shaped around a recording and every
+ * consumer assumes a player and a timestamp. Rather than break those, the recording fields
+ * stay where they are and exhibits fill them with empty values, distinguished by
+ * `sourceType` — which is absent on older citations and therefore treated as 'recording'.
+ */
+export type CitationSourceType = 'recording' | 'document' | 'image';
+
 export type Citation = {
   index: number;
+  /** Transcript text for a recording; OCR page text for a document or image. */
   transcription: string;
   speaker: string;
+  /** Recording title, or the exhibit's title. */
   interviewTitle: string;
   sectionTitle: string;
   startTime: number;
@@ -29,6 +41,30 @@ export type Citation = {
   isAudioFile?: boolean;
   score?: number;
   isChapterSynopsis?: boolean;
+
+  /** Absent on citations created before Discover covered documents and images. */
+  sourceType?: CitationSourceType;
+
+  // Exhibit-only. Set when sourceType is 'document' or 'image'.
+  /** IDL document id, e.g. ffbd0426. */
+  sourceId?: string;
+  page?: number;
+  pageCount?: number;
+  /** Full-size rendered page image, served from public/. */
+  imageUrl?: string;
+  /** Small render, used for cards and for what is sent to the model. */
+  thumbnailUrl?: string;
+  /** The record in the Industry Documents Library. */
+  sourceUrl?: string;
+  /** Bates number for this page: how a filing cites it. */
+  batesNumber?: string;
+  caseNumber?: string;
+  exhibitNumber?: string;
+  /**
+   * True when the page image was sent to the model rather than only its text — so the UI
+   * can say the answer was drawn from looking at the page.
+   */
+  imageSentToModel?: boolean;
 };
 
 export type ChatRequest = {

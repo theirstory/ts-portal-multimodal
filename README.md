@@ -277,6 +277,7 @@ See [docs/MULTIMODAL_SEARCH.md](./docs/MULTIMODAL_SEARCH.md) for the measurement
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Container architecture and services
 - **[docs/IMPORTING_INTERVIEWS.md](./docs/IMPORTING_INTERVIEWS.md)** - JSON format and import process
 - **[docs/MULTIMODAL_SEARCH.md](./docs/MULTIMODAL_SEARCH.md)** - Unified search across recordings, documents, and images
+- **[docs/MULTIMODAL_PROJECT.md](./docs/MULTIMODAL_PROJECT.md)** - The multimodal work end to end: search, Discover, and the interface, with measurements and limitations
 - **[docs/ENVIRONMENT.md](./docs/ENVIRONMENT.md)** - Environment variables and advanced configuration
 - **[docs/COMMANDS.md](./docs/COMMANDS.md)** - All available commands
 - **[docs/DEPLOY_PRODUCTION.md](./docs/DEPLOY_PRODUCTION.md)** - Production deployment guide (works on any Docker host, with DigitalOcean example)

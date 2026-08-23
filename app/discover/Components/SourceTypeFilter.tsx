@@ -1,0 +1,102 @@
+'use client';
+
+import React from 'react';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import { darken } from '@mui/material/styles';
+import { Citation, CitationSourceType } from '@/types/chat';
+import { SOURCE_TYPE_COLOR, SOURCE_TYPE_LABEL_PLURAL, sourceTypeTint } from '@/lib/theme/sourceTypes';
+
+export const SOURCE_TYPE_ORDER: CitationSourceType[] = ['recording', 'document', 'image'];
+
+const LABELS = SOURCE_TYPE_LABEL_PLURAL;
+const ACCENTS = SOURCE_TYPE_COLOR;
+
+/** Citations predating multimodal Discover have no sourceType and are recordings. */
+export function citationSourceType(citation: Citation): CitationSourceType {
+  return citation.sourceType ?? 'recording';
+}
+
+export function countBySourceType(citations: Citation[]): Record<CitationSourceType, number> {
+  const counts: Record<CitationSourceType, number> = { recording: 0, document: 0, image: 0 };
+  for (const citation of citations) counts[citationSourceType(citation)] += 1;
+  return counts;
+}
+
+/**
+ * Filter to the selected types.
+ *
+ * Nothing selected means everything shows. That is what makes clicking a chip *select* the
+ * type a reader wants rather than exclude it: the chips start unselected, so the first click
+ * narrows to one kind, which is what people reach for. Starting them all selected inverted
+ * the gesture — clicking "Documents" hid the documents, and getting to documents alone meant
+ * clicking the other two off.
+ */
+export function filterBySourceTypes(citations: Citation[], active: CitationSourceType[]): Citation[] {
+  if (!active.length || active.length === SOURCE_TYPE_ORDER.length) return citations;
+  return citations.filter((citation) => active.includes(citationSourceType(citation)));
+}
+
+type Props = {
+  citations: Citation[];
+  active: CitationSourceType[];
+  onToggle: (sourceType: CitationSourceType) => void;
+};
+
+/**
+ * Filter the cited sources by kind.
+ *
+ * An answer can rest on testimony, on produced documents, and on photographs at once, and a
+ * researcher checking it usually wants one of those at a time — "show me the documents this
+ * claim rests on" is a different question from "show me who said it".
+ *
+ * Chips are additive: none selected shows everything, clicking one narrows to it, clicking a
+ * second adds it back alongside, clicking a selected one removes it. Types with no citations
+ * in the current answer are hidden rather than shown as dead zeroes.
+ */
+export function SourceTypeFilter({ citations, active, onToggle }: Props) {
+  const counts = countBySourceType(citations);
+  const present = SOURCE_TYPE_ORDER.filter((sourceType) => counts[sourceType] > 0);
+
+  // Nothing to choose between when the answer draws on a single kind of source.
+  if (present.length < 2) return null;
+
+  return (
+    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
+      {present.map((sourceType) => {
+        const isActive = active.includes(sourceType);
+        return (
+          <Chip
+            key={sourceType}
+            size="small"
+            label={`${LABELS[sourceType]} ${counts[sourceType]}`}
+            onClick={() => onToggle(sourceType)}
+            variant={isActive ? 'filled' : 'outlined'}
+            sx={{
+              height: 24,
+              fontSize: '0.7rem',
+              // MUI gives a clickable Chip its own hover background, which replaced the
+              // accent and left white text on light grey — the label vanished on hover.
+              // Both states set their own hover explicitly so the label always has contrast.
+              ...(isActive
+                ? {
+                    backgroundColor: ACCENTS[sourceType],
+                    color: '#fff',
+                    '&:hover': { backgroundColor: darken(ACCENTS[sourceType], 0.18) },
+                    '&:focus-visible': { backgroundColor: darken(ACCENTS[sourceType], 0.18) },
+                  }
+                : {
+                    borderColor: ACCENTS[sourceType],
+                    color: ACCENTS[sourceType],
+                    '&:hover': {
+                      backgroundColor: sourceTypeTint(sourceType, 0.14),
+                      borderColor: ACCENTS[sourceType],
+                    },
+                  }),
+            }}
+          />
+        );
+      })}
+    </Box>
+  );
+}

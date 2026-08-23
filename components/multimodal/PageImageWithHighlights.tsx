@@ -90,13 +90,15 @@ export function PageImageWithHighlights({ imageUrl, alt, query, mode }: Props) {
     };
   }, [imageUrl]);
 
-  // Ask the server which passage the model considers closest to the query. Only meaningful
-  // for a semantic search; in keyword mode the terms themselves are the answer.
+  // Ask the server which passage the model considers closest to the query. Skipped only for
+  // keyword search, where the terms themselves are the answer and are already marked. Any
+  // other query is a description of meaning — a semantic search, or a question put to
+  // Discover — and is worth locating on the page.
   React.useEffect(() => {
     let cancelled = false;
     setPassage(null);
 
-    if (!imageUrl || !query || mode !== 'semantic') {
+    if (!imageUrl || !query || mode === 'keyword') {
       setPassageState('done');
       return;
     }

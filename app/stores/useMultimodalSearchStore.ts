@@ -8,6 +8,15 @@ type MultimodalSearchState = {
   results: MultimodalResult[];
   /** How many candidates each source type contributed before merging. */
   perTypeCounts: Record<SourceType, number>;
+  /**
+   * How many results each type has for the current query, ignoring the type filter.
+   *
+   * The chips used to count what was on screen, so filtering documents out changed
+   * "Documents 16" to "Documents 0" — which reads as "there are none" rather than "these
+   * are hidden". This is only refreshed by an unfiltered fetch, so the numbers keep
+   * describing the query while the chips' colour describes the filter.
+   */
+  typeCounts: Record<SourceType, number>;
   /** Which source types the user has enabled. Empty is treated as "all". */
   activeSourceTypes: SourceType[];
   loading: boolean;
@@ -32,11 +41,21 @@ type MultimodalSearchState = {
   clear: () => void;
 };
 
+function countByType(results: MultimodalResult[]): Record<SourceType, number> {
+  const counts: Record<SourceType, number> = { recording: 0, document: 0, image: 0 };
+  for (const result of results) counts[result.sourceType] += 1;
+  return counts;
+}
+
 export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get) => ({
   query: '',
   results: [],
   perTypeCounts: { recording: 0, document: 0, image: 0 },
-  activeSourceTypes: [...ALL_SOURCE_TYPES],
+  typeCounts: { recording: 0, document: 0, image: 0 },
+  // Nothing selected means everything shows, so the first chip click narrows to that
+  // type. Starting them all selected inverted the gesture: clicking "Documents" hid the
+  // documents, and seeing documents alone meant clicking the other two off.
+  activeSourceTypes: [],
   loading: false,
   hasSearched: false,
   error: null,
@@ -66,9 +85,9 @@ export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get)
     set({ activeSourceTypes: next });
 
     // Re-run against the new filter so the counts and ordering stay truthful, rather than
-    // filtering a stale result set client-side.
-    if (!next.length) return;
-
+    // filtering a stale result set client-side. This includes clearing the last chip, which
+    // means "show everything" and so still needs a fresh query — returning early there left
+    // the previous, narrower results on screen.
     if (get().hasSearched && get().query.trim()) {
       void get().search();
     } else if (get().browsing) {
@@ -93,9 +112,13 @@ export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get)
       const body = await response.json();
       if (!response.ok) throw new Error(body?.error || `Browse failed (HTTP ${response.status})`);
 
+      const results = body.results ?? [];
+
       set({
-        results: body.results ?? [],
+        results,
         perTypeCounts: body.perTypeCounts ?? { recording: 0, document: 0, image: 0 },
+        // Only an unfiltered fetch can see every type, so only it may refresh the counts.
+        ...(activeSourceTypes.length ? {} : { typeCounts: countByType(results) }),
         browsing: true,
         hasSearched: false,
         loading: false,
@@ -147,6 +170,7 @@ export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get)
       set({
         results,
         perTypeCounts: body.perTypeCounts ?? { recording: 0, document: 0, image: 0 },
+        ...(activeSourceTypes.length ? {} : { typeCounts: countByType(results) }),
         hasSearched: true,
         browsing: false,
         loading: false,
@@ -185,6 +209,7 @@ export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get)
       query: '',
       results: [],
       perTypeCounts: { recording: 0, document: 0, image: 0 },
+      typeCounts: { recording: 0, document: 0, image: 0 },
       hasSearched: false,
       browsing: false,
       error: null,

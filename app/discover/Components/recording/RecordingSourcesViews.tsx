@@ -4,12 +4,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useChatStore } from '@/app/stores/useChatStore';
-import { AudioFileWave } from '@/app/assets/svg/AudioFileWave';
 import { Citation } from '@/types/chat';
-import { getMuxPlaybackId } from '@/app/utils/converters';
 import { colors } from '@/lib/theme';
 import { highlightSearchText } from '@/app/indexes/highlightSearch';
 import { CHAPTER_COLOR, CLIP_COLOR, formatTime, groupByRecording } from './recordingViewShared';
+import { SourceThumbnail, sourceMetaLabel, sourceAccent } from './sourcePresentation';
 
 const ExpandableText = ({ text, highlight = '' }: { text: string; highlight?: string }) => {
   const [expanded, setExpanded] = useState(false);
@@ -138,12 +137,7 @@ export function NumberedSourcesView({
     <Box ref={containerRef}>
       {sorted.map((citation) => {
         const isChapter = !!citation.isChapterSynopsis;
-        const accentColor = isChapter ? CHAPTER_COLOR : CLIP_COLOR;
-        const playbackId = getMuxPlaybackId(citation.videoUrl);
-        const thumbnailUrl =
-          playbackId && !citation.isAudioFile
-            ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop&time=${Math.floor(citation.startTime)}`
-            : null;
+        const accentColor = sourceAccent(citation, isChapter ? CHAPTER_COLOR : CLIP_COLOR);
 
         return (
           <Box
@@ -165,50 +159,7 @@ export function NumberedSourcesView({
               transition: 'all 0.15s',
               ...highlightSx(citation.index),
             }}>
-            {thumbnailUrl ? (
-              <Box
-                component="img"
-                src={thumbnailUrl}
-                alt={citation.interviewTitle}
-                sx={{
-                  width: 64,
-                  aspectRatio: '16/9',
-                  objectFit: 'cover',
-                  borderRadius: 1,
-                  bgcolor: colors.grey[200],
-                  flexShrink: 0,
-                  alignSelf: 'flex-start',
-                  mt: 0.25,
-                }}
-              />
-            ) : citation.isAudioFile ? (
-              <Box
-                sx={{
-                  width: 64,
-                  aspectRatio: '16/9',
-                  bgcolor: colors.grey[200],
-                  borderRadius: 1,
-                  flexShrink: 0,
-                  alignSelf: 'flex-start',
-                  mt: 0.25,
-                  display: 'grid',
-                  placeItems: 'center',
-                }}>
-                <AudioFileWave width="44" height="20" color={colors.grey[600]} />
-              </Box>
-            ) : (
-              <Box
-                sx={{
-                  width: 64,
-                  aspectRatio: '16/9',
-                  bgcolor: colors.grey[200],
-                  borderRadius: 1,
-                  flexShrink: 0,
-                  alignSelf: 'flex-start',
-                  mt: 0.25,
-                }}
-              />
-            )}
+            <SourceThumbnail source={citation} alt={citation.interviewTitle} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
                 <CitationBadge
@@ -233,7 +184,7 @@ export function NumberedSourcesView({
                   )}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                  {formatTime(citation.startTime)}–{formatTime(citation.endTime)}
+                  {sourceMetaLabel(citation, formatTime)}
                 </Typography>
               </Box>
               <ExpandableText text={citation.transcription} highlight={filterTerm} />
@@ -319,11 +270,6 @@ export function GroupedSourcesView({
   return (
     <Box ref={containerRef}>
       {groups.map((group) => {
-        const playbackId = getMuxPlaybackId(group.videoUrl);
-        const thumbnailUrl =
-          playbackId && !group.isAudioFile
-            ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop`
-            : null;
         const hasContent = group.chapters.length > 0 || group.ungroupedClips.length > 0;
         if (!hasContent) return null;
 
@@ -344,7 +290,7 @@ export function GroupedSourcesView({
         });
 
         return (
-          <Box key={group.theirstoryId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
+          <Box key={group.groupId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
             <Box
               onClick={() => toggleCollapse(group.theirstoryId)}
               sx={{
@@ -370,36 +316,7 @@ export function GroupedSourcesView({
                   flexShrink: 0,
                 }}
               />
-              {thumbnailUrl ? (
-                <Box
-                  component="img"
-                  src={thumbnailUrl}
-                  alt={group.interviewTitle}
-                  sx={{
-                    width: 64,
-                    aspectRatio: '16/9',
-                    objectFit: 'cover',
-                    borderRadius: 1,
-                    bgcolor: colors.grey[200],
-                    flexShrink: 0,
-                  }}
-                />
-              ) : group.isAudioFile ? (
-                <Box
-                  sx={{
-                    width: 64,
-                    aspectRatio: '16/9',
-                    bgcolor: colors.grey[200],
-                    borderRadius: 1,
-                    flexShrink: 0,
-                    display: 'grid',
-                    placeItems: 'center',
-                  }}>
-                  <AudioFileWave width="44" height="20" color={colors.grey[600]} />
-                </Box>
-              ) : (
-                <Box sx={{ width: 64, aspectRatio: '16/9', bgcolor: colors.grey[200], borderRadius: 1, flexShrink: 0 }} />
-              )}
+              <SourceThumbnail source={group} alt={group.interviewTitle} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.3 }}>
                   {highlightSearchText(group.interviewTitle, filterTerm)}
@@ -444,7 +361,7 @@ export function GroupedSourcesView({
                             {highlightSearchText(chapter.sectionTitle, filterTerm)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                            {formatTime(chapter.startTime)}–{formatTime(chapter.endTime)}
+                            {sourceMetaLabel(chapter, formatTime)}
                           </Typography>
                         </Box>
                         <ExpandableText text={chapter.transcription} highlight={filterTerm} />
@@ -481,7 +398,7 @@ export function GroupedSourcesView({
                               {highlightSearchText(clip.speaker, filterTerm)}
                             </Typography>
                             <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                              {formatTime(clip.startTime)}–{formatTime(clip.endTime)}
+                              {sourceMetaLabel(clip, formatTime)}
                             </Typography>
                           </Box>
                           <ExpandableText text={clip.transcription} highlight={filterTerm} />
@@ -523,7 +440,7 @@ export function GroupedSourcesView({
                         {clip.sectionTitle && <> &middot; {highlightSearchText(clip.sectionTitle, filterTerm)}</>}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                        {formatTime(clip.startTime)}–{formatTime(clip.endTime)}
+                        {sourceMetaLabel(clip, formatTime)}
                       </Typography>
                     </Box>
                     <ExpandableText text={clip.transcription} highlight={filterTerm} />

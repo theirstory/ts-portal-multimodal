@@ -62,6 +62,7 @@ export const SidePanelTranscriptView = () => {
   const transcriptCitation = useChatStore((s) => s.transcriptCitation);
   const previousMode = useChatStore((s) => s.previousMode);
   const storeGoBack = useChatStore((s) => s.goBack);
+  const citationSiblings = useChatStore((s) => s.activeCitationSiblings);
   const { onGoBack } = useChatInteraction();
   const goBack = onGoBack ?? storeGoBack;
 
@@ -338,7 +339,11 @@ export const SidePanelTranscriptView = () => {
 
   if (!transcriptCitation) return null;
 
-  const backLabel = previousMode === 'search' ? 'Back to results' : 'Back to source';
+  // Carry the count, as the source list does, so the button says how much is behind it.
+  const backLabel =
+    previousMode === 'search'
+      ? 'Back to results'
+      : `Back to sources${citationSiblings.length ? ` (${citationSiblings.length})` : ''}`;
   const hasResults = totalMatches > 0;
   const showMatchNavigation = !!searchTerm.trim() && hasResults;
   const placeholder =

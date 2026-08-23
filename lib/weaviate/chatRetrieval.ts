@@ -230,3 +230,72 @@ export async function retrieveAllChapterSynopses(): Promise<ChapterSynopsis[]> {
 
   return synopses;
 }
+
+/**
+ * Retrieve across every source type for Discover: transcript chunks, document pages, and
+ * images, ranked together.
+ *
+ * This delegates to `multimodalSearch` rather than issuing its own queries, because merging
+ * two classes naively is exactly the trap that function already solves. Raw scores are not
+ * comparable across a vector space that holds both text and images — text-to-text similarity
+ * runs systematically higher — so a naive merge buries every page and photograph beneath
+ * mediocre transcript matches, and the chat quietly becomes transcript-only again.
+ *
+ * Hybrid, at the alpha Discover has always used, so its retrieval behaviour does not change
+ * for recordings.
+ */
+export async function retrieveSourcesForChat(query: string, limit = 20): Promise<Citation[]> {
+  const { multimodalSearch } = await import('./multimodalSearch');
+
+  const { results } = await multimodalSearch(query, {
+    mode: 'hybrid',
+    hybridAlpha: 0.55,
+    limit,
+    // Chat cites a handful of sources, so spread them across documents rather than letting
+    // one long deposition or report supply every citation.
+    maxPerSource: 2,
+  });
+
+  return results.map((result, index) => {
+    if (result.sourceType === 'recording') {
+      return {
+        index: index + 1,
+        sourceType: 'recording' as const,
+        transcription: result.snippet,
+        speaker: result.speaker ?? '',
+        interviewTitle: result.title,
+        sectionTitle: result.sectionTitle ?? '',
+        startTime: result.startTime ?? 0,
+        endTime: result.endTime ?? 0,
+        theirstoryId: result.storyId ?? '',
+        videoUrl: result.videoUrl ?? '',
+        isAudioFile: result.isAudioFile,
+        score: result.score,
+      };
+    }
+
+    return {
+      index: index + 1,
+      sourceType: result.sourceType,
+      transcription: result.snippet,
+      speaker: '',
+      interviewTitle: result.title,
+      sectionTitle: '',
+      // A page has no timeline; these stay zero so existing consumers do not break.
+      startTime: 0,
+      endTime: 0,
+      theirstoryId: '',
+      videoUrl: '',
+      score: result.score,
+      sourceId: result.sourceId,
+      page: result.page,
+      pageCount: result.pageCount,
+      imageUrl: result.imageUrl,
+      thumbnailUrl: result.thumbnailUrl,
+      sourceUrl: result.sourceUrl,
+      batesNumber: result.archival?.batesForPage || result.archival?.batesNumber || '',
+      caseNumber: result.archival?.caseNumbers?.[0] ?? '',
+      exhibitNumber: result.exhibitNumber ?? '',
+    };
+  });
+}

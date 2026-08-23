@@ -403,10 +403,20 @@ export const useChatStore = create<ChatStore>()(
               }
             }
           }
+          // A citation names a moment, so clicking one should land on that moment with the
+          // transcript and chapters around it — not on a player behind an "open transcript"
+          // button. Exhibits have no transcript to open, so they keep the detail view, which
+          // for them shows the page image.
+          const isExhibit = citation.sourceType === 'document' || citation.sourceType === 'image';
+
           set(
             {
               activeCitation: citation,
-              sidePanelMode: 'recording',
+              sidePanelMode: isExhibit ? 'recording' : 'transcript',
+              transcriptCitation: isExhibit ? get().transcriptCitation : citation,
+              // Returning from the transcript should land back on the source list rather
+              // than on the interstitial that was just skipped.
+              previousMode: isExhibit ? get().previousMode : 'recording',
               activeCitationSiblings: siblings ?? [],
               citationOpenedViaChip: true,
               activePromptText: promptText,
@@ -499,6 +509,11 @@ export const useChatStore = create<ChatStore>()(
               sidePanelMode: state.previousMode ?? 'hidden',
               previousMode: null,
               transcriptCitation: null,
+              // Land on the list of sources. There used to be a single-source view between
+              // the list and the transcript, and going back meant returning to it; now that
+              // a citation opens the transcript directly, that step no longer exists and
+              // returning to it would strand the reader on a page they never chose.
+              sidePanelDetailView: false,
             }),
             false,
             'goBack',

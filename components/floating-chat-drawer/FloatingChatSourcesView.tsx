@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { Box, Button, InputAdornment, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -9,9 +11,14 @@ import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import SearchIcon from '@mui/icons-material/Search';
 import { Citation } from '@/types/chat';
 import { colors } from '@/lib/theme';
-import { getMuxPlaybackId } from '@/app/utils/converters';
 import { highlightSearchText } from '@/app/indexes/highlightSearch';
 import { formatTime, groupByRecording } from './helpers';
+import { SourceThumbnail, sourceMetaLabel } from '@/app/discover/Components/recording/sourcePresentation';
+import {
+  SourceTypeFilter,
+  filterBySourceTypes,
+} from '@/app/discover/Components/SourceTypeFilter';
+import type { CitationSourceType } from '@/types/chat';
 
 type SourcesListMode = 'recording' | 'number';
 
@@ -38,15 +45,30 @@ export function FloatingChatSourcesView({
   onToggleCollapse,
   onSelectCitation,
 }: FloatingChatSourcesViewProps) {
+  // View-local: which kinds of source to show. Kept here rather than lifted, because
+  // nothing outside this panel needs to know about it.
+  // Nothing selected means everything shows, so the first chip click narrows to that type.
+  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([]);
+
+  const toggleType = (sourceType: CitationSourceType) =>
+    setActiveTypes((current) =>
+      current.includes(sourceType)
+        ? current.filter((type) => type !== sourceType)
+        : [...current, sourceType],
+    );
+
   const filteredCitations = (() => {
+    const byType = filterBySourceTypes(citations, activeTypes);
     const normalized = filterTerm.trim().toLowerCase();
-    if (!normalized) return citations;
-    return citations.filter(
+    if (!normalized) return byType;
+    return byType.filter(
       (citation) =>
         citation.interviewTitle.toLowerCase().includes(normalized) ||
         citation.sectionTitle.toLowerCase().includes(normalized) ||
         citation.transcription.toLowerCase().includes(normalized) ||
-        citation.speaker.toLowerCase().includes(normalized),
+        citation.speaker.toLowerCase().includes(normalized) ||
+        (citation.batesNumber ?? '').toLowerCase().includes(normalized) ||
+        (citation.exhibitNumber ?? '').toLowerCase().includes(normalized),
     );
   })();
 
@@ -120,16 +142,12 @@ export function FloatingChatSourcesView({
           }}
           sx={{ bgcolor: colors.background.default, borderRadius: '8px' }}
         />
+        <SourceTypeFilter citations={citations} active={activeTypes} onToggle={toggleType} />
       </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {listMode === 'number'
           ? [...filteredCitations].sort((a, b) => a.index - b.index).map((citation) => {
-              const playbackId = getMuxPlaybackId(citation.videoUrl);
-              const thumbnailUrl =
-                playbackId && !citation.isAudioFile
-                  ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop&time=${Math.floor(citation.startTime)}`
-                  : null;
 
               return (
                 <Box
@@ -147,35 +165,7 @@ export function FloatingChatSourcesView({
                     '&:hover': { bgcolor: colors.grey[50] },
                     transition: 'background-color 0.15s',
                   }}>
-                  {thumbnailUrl ? (
-                    <Box
-                      component="img"
-                      src={thumbnailUrl}
-                      alt={citation.interviewTitle}
-                      sx={{
-                        width: 48,
-                        aspectRatio: '16/9',
-                        objectFit: 'cover',
-                        borderRadius: 1,
-                        bgcolor: colors.grey[200],
-                        flexShrink: 0,
-                        alignSelf: 'flex-start',
-                        mt: 0.25,
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      sx={{
-                        width: 48,
-                        aspectRatio: '16/9',
-                        bgcolor: colors.grey[200],
-                        borderRadius: 1,
-                        flexShrink: 0,
-                        alignSelf: 'flex-start',
-                        mt: 0.25,
-                      }}
-                    />
-                  )}
+                  <SourceThumbnail source={citation} alt={citation.interviewTitle} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
                       <Box
@@ -206,7 +196,7 @@ export function FloatingChatSourcesView({
                         )}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                        {formatTime(citation.startTime)}–{formatTime(citation.endTime)}
+                        {sourceMetaLabel(citation, formatTime)}
                       </Typography>
                     </Box>
                     <Typography
@@ -227,15 +217,10 @@ export function FloatingChatSourcesView({
               );
             })
           : groupByRecording(filteredCitations).map((group) => {
-              const playbackId = getMuxPlaybackId(group.videoUrl);
-              const thumbnailUrl =
-                playbackId && !group.isAudioFile
-                  ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop`
-                  : null;
               const isCollapsed = collapsed.has(group.theirstoryId);
 
               return (
-                <Box key={group.theirstoryId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
+                <Box key={group.groupId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
                   <Box
                     onClick={() => onToggleCollapse(group.theirstoryId)}
                     sx={{
@@ -261,31 +246,7 @@ export function FloatingChatSourcesView({
                         flexShrink: 0,
                       }}
                     />
-                    {thumbnailUrl ? (
-                      <Box
-                        component="img"
-                        src={thumbnailUrl}
-                        alt={group.interviewTitle}
-                        sx={{
-                          width: 48,
-                          aspectRatio: '16/9',
-                          objectFit: 'cover',
-                          borderRadius: 1,
-                          bgcolor: colors.grey[200],
-                          flexShrink: 0,
-                        }}
-                      />
-                    ) : (
-                      <Box
-                        sx={{
-                          width: 48,
-                          aspectRatio: '16/9',
-                          bgcolor: colors.grey[200],
-                          borderRadius: 1,
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
+                    <SourceThumbnail source={group} alt={group.interviewTitle} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.3, fontSize: '0.8rem' }}>
                         {highlightSearchText(group.interviewTitle, filterTerm)}
@@ -332,7 +293,7 @@ export function FloatingChatSourcesView({
                             {' · '}
                             {citation.sectionTitle}
                             {' · '}
-                            {formatTime(citation.startTime)}–{formatTime(citation.endTime)}
+                            {sourceMetaLabel(citation, formatTime)}
                           </Typography>
                         </Box>
                         <Typography

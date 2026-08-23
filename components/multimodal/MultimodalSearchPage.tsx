@@ -23,6 +23,7 @@ import { ALL_SOURCE_TYPES, useMultimodalSearchStore } from '@/app/stores/useMult
 import type { SearchMode, SourceType } from '@/lib/weaviate/multimodalSearch';
 import { MultimodalResultCard } from './MultimodalResultCard';
 import { ExhibitDetailDrawer } from './ExhibitDetailDrawer';
+import { RecordingDetailDrawer } from './RecordingDetailDrawer';
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   recording: 'Recordings',
@@ -41,7 +42,7 @@ export function MultimodalSearchPage() {
   const {
     query,
     results,
-    perTypeCounts,
+    typeCounts,
     activeSourceTypes,
     loading,
     hasSearched,
@@ -110,23 +111,43 @@ export function MultimodalSearchPage() {
     void search();
   }, [urlQuery, urlMode, setQuery, setMode, search, browse, setTopBarCollapsedAuto]);
 
+  /**
+   * Which `open=` value has already been acted on.
+   *
+   * Closing the drawer clears the state and the URL together, but the router publishes the
+   * new search params a render later — so this effect could still see the old uuid, find it
+   * in the results, and immediately re-open what the reader had just dismissed. It looked
+   * like the backdrop needed two clicks. Remembering what has been handled means a stale
+   * parameter cannot resurrect a closed drawer, while a genuinely different uuid still opens.
+   */
+  const handledOpenRef = React.useRef('');
+
   React.useEffect(() => {
-    if (!urlOpen || selectedResult?.uuid === urlOpen) return;
+    if (!urlOpen) {
+      handledOpenRef.current = '';
+      return;
+    }
+    if (handledOpenRef.current === urlOpen) return;
+
+    if (selectedResult?.uuid === urlOpen) {
+      handledOpenRef.current = urlOpen;
+      return;
+    }
+
     const match = results.find((result) => result.uuid === urlOpen);
-    if (match) setSelectedResult(match);
+    if (match) {
+      handledOpenRef.current = urlOpen;
+      setSelectedResult(match);
+    }
   }, [urlOpen, results, selectedResult, setSelectedResult]);
 
-  const resultsByType = React.useMemo(
-    () =>
-      results.reduce<Record<SourceType, number>>(
-        (acc, result) => {
-          acc[result.sourceType] += 1;
-          return acc;
-        },
-        { recording: 0, document: 0, image: 0 },
-      ),
-    [results],
-  );
+  // Both drawers close the same way; keeping it in one place also keeps the two in step.
+  const closeDetail = React.useCallback(() => {
+    setSelectedResult(null);
+    if (submittedQuery || query) {
+      router.replace(buildUrl(submittedQuery || query, mode), { scroll: false });
+    }
+  }, [buildUrl, mode, query, router, setSelectedResult, submittedQuery]);
 
   // Relevance bars are scaled against the best hit in the set, so they mean "how close to
   // the top result" rather than exposing an absolute cosine no reader can calibrate.
@@ -220,7 +241,9 @@ export function MultimodalSearchPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
           {ALL_SOURCE_TYPES.map((sourceType) => {
             const active = activeSourceTypes.includes(sourceType);
-            const count = results.length ? resultsByType[sourceType] : undefined;
+            // What exists for this query, not what survived the filter — a hidden type still
+            // says how much it is hiding.
+            const count = typeCounts[sourceType] || undefined;
             return (
               <Chip
                 key={sourceType}
@@ -242,9 +265,6 @@ export function MultimodalSearchPage() {
           {showingResults && (
             <Typography variant="caption" color="text.secondary">
               {browsing ? `Browsing ${results.length} items` : `${results.length} results`}
-              {showScores && !browsing
-                ? ` · candidates ${perTypeCounts.recording}/${perTypeCounts.document}/${perTypeCounts.image}`
-                : ''}
             </Typography>
           )}
         </Box>
@@ -294,7 +314,12 @@ export function MultimodalSearchPage() {
               // Two columns on a wide screen: these cards are short, and one narrow column
               // left most of the page empty.
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+              // minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), and an auto minimum
+              // refuses to shrink below the intrinsic width of its content. The card's title
+              // and detail lines are nowrap, so their intrinsic width is the whole
+              // untruncated string — which pushed both columns past the viewport and put a
+              // horizontal scrollbar under the results instead of ellipsising.
+              gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) minmax(0, 1fr)' },
               gap: 1,
               alignContent: 'start',
               '&::-webkit-scrollbar': { width: '8px' },
@@ -308,18 +333,9 @@ export function MultimodalSearchPage() {
                 showScores={showScores}
                 topScore={topScore}
                 onSelect={(selected) => {
-                  // A transcript hit is only useful if it takes you to that moment, so
-                  // recordings open the story page seeked to the chunk. Exhibits have no
-                  // separate page, so they open in the detail drawer instead.
-                  if (selected.sourceType === 'recording') {
-                    if (!selected.storyId) return;
-                    const params = new URLSearchParams();
-                    params.set('start', String(selected.startTime ?? 0));
-                    params.set('end', String(selected.endTime ?? 0));
-                    window.open(`/story/${selected.storyId}?${params.toString()}`, '_blank');
-                    return;
-                  }
-
+                  // Everything opens in place. Sending recordings to a new tab lost the
+                  // result list, which is exactly what a reader is working from when
+                  // comparing several hits.
                   setSelectedResult(selected);
                   if (submittedQuery || query) {
                     router.replace(buildUrl(submittedQuery || query, mode, selected.uuid), { scroll: false });
@@ -339,15 +355,15 @@ export function MultimodalSearchPage() {
         )}
       </Box>
 
+      <RecordingDetailDrawer
+        result={selectedResult?.sourceType === 'recording' ? selectedResult : null}
+        onClose={closeDetail}
+      />
+
       <ExhibitDetailDrawer
-        result={selectedResult}
+        result={selectedResult?.sourceType === 'recording' ? null : selectedResult}
         query={submittedQuery}
-        onClose={() => {
-          setSelectedResult(null);
-          if (submittedQuery || query) {
-            router.replace(buildUrl(submittedQuery || query, mode), { scroll: false });
-          }
-        }}
+        onClose={closeDetail}
       />
     </Box>
   );
