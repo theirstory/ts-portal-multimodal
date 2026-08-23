@@ -17,7 +17,6 @@ import { formatTime, groupByRecording } from './helpers';
 import {
   SourceTypeFilter,
   filterBySourceTypes,
-  SOURCE_TYPE_ORDER,
 } from '@/app/discover/Components/SourceTypeFilter';
 import type { CitationSourceType } from '@/types/chat';
 
@@ -48,7 +47,8 @@ export function FloatingChatSourcesView({
 }: FloatingChatSourcesViewProps) {
   // View-local: which kinds of source to show. Kept here rather than lifted, because
   // nothing outside this panel needs to know about it.
-  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([...SOURCE_TYPE_ORDER]);
+  // Nothing selected means everything shows, so the first chip click narrows to that type.
+  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([]);
 
   const toggleType = (sourceType: CitationSourceType) =>
     setActiveTypes((current) =>

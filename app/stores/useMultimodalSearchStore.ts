@@ -36,7 +36,10 @@ export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get)
   query: '',
   results: [],
   perTypeCounts: { recording: 0, document: 0, image: 0 },
-  activeSourceTypes: [...ALL_SOURCE_TYPES],
+  // Nothing selected means everything shows, so the first chip click narrows to that
+  // type. Starting them all selected inverted the gesture: clicking "Documents" hid the
+  // documents, and seeing documents alone meant clicking the other two off.
+  activeSourceTypes: [],
   loading: false,
   hasSearched: false,
   error: null,
@@ -66,9 +69,9 @@ export const useMultimodalSearchStore = create<MultimodalSearchState>((set, get)
     set({ activeSourceTypes: next });
 
     // Re-run against the new filter so the counts and ordering stay truthful, rather than
-    // filtering a stale result set client-side.
-    if (!next.length) return;
-
+    // filtering a stale result set client-side. This includes clearing the last chip, which
+    // means "show everything" and so still needs a fresh query — returning early there left
+    // the previous, narrower results on screen.
     if (get().hasSearched && get().query.trim()) {
       void get().search();
     } else if (get().browsing) {

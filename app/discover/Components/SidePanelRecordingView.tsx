@@ -12,7 +12,7 @@ import MuxPlayerElement from '@mux/mux-player';
 import { useChatStore } from '@/app/stores/useChatStore';
 import { Citation } from '@/types/chat';
 import { CitationExhibitView } from './CitationExhibitView';
-import { SourceTypeFilter, filterBySourceTypes, SOURCE_TYPE_ORDER } from './SourceTypeFilter';
+import { SourceTypeFilter, filterBySourceTypes } from './SourceTypeFilter';
 import type { CitationSourceType } from '@/types/chat';
 import { colors } from '@/lib/theme';
 import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
@@ -32,7 +32,8 @@ export const SidePanelRecordingView = () => {
   const hasSiblings = activeCitationSiblings.length > 1;
   const [filterTerm, setFilterTerm] = useState('');
   const [listMode, setListMode] = useState<'recording' | 'number'>('recording');
-  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([...SOURCE_TYPE_ORDER]);
+  // Nothing selected means everything shows, so the first chip click narrows to that type.
+  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([]);
 
   const toggleType = (sourceType: CitationSourceType) =>
     setActiveTypes((current) =>
@@ -53,7 +54,7 @@ export const SidePanelRecordingView = () => {
   useEffect(() => {
     if (!sidePanelDetailView) {
       setFilterTerm('');
-      setActiveTypes([...SOURCE_TYPE_ORDER]);
+      setActiveTypes([]);
     }
   }, [sidePanelDetailView]);
 

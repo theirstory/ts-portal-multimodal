@@ -22,9 +22,16 @@ export function countBySourceType(citations: Citation[]): Record<CitationSourceT
   return counts;
 }
 
+/**
+ * Filter to the selected types.
+ *
+ * Nothing selected means everything shows. That is what makes clicking a chip *select* the
+ * type a reader wants rather than exclude it: the chips start unselected, so the first click
+ * narrows to one kind, which is what people reach for. Starting them all selected inverted
+ * the gesture — clicking "Documents" hid the documents, and getting to documents alone meant
+ * clicking the other two off.
+ */
 export function filterBySourceTypes(citations: Citation[], active: CitationSourceType[]): Citation[] {
-  // An empty selection means "no filter" rather than "nothing", so clearing every chip
-  // shows everything instead of emptying the panel.
   if (!active.length || active.length === SOURCE_TYPE_ORDER.length) return citations;
   return citations.filter((citation) => active.includes(citationSourceType(citation)));
 }
@@ -40,8 +47,11 @@ type Props = {
  *
  * An answer can rest on testimony, on produced documents, and on photographs at once, and a
  * researcher checking it usually wants one of those at a time — "show me the documents this
- * claim rests on" is a different question from "show me who said it". Types with no
- * citations in the current answer are hidden rather than shown as dead zeroes.
+ * claim rests on" is a different question from "show me who said it".
+ *
+ * Chips are additive: none selected shows everything, clicking one narrows to it, clicking a
+ * second adds it back alongside, clicking a selected one removes it. Types with no citations
+ * in the current answer are hidden rather than shown as dead zeroes.
  */
 export function SourceTypeFilter({ citations, active, onToggle }: Props) {
   const counts = countBySourceType(citations);
