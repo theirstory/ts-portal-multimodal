@@ -1,5 +1,9 @@
 # Multimodal Search
 
+> Retrieval and ingest internals. For the end-to-end account of the multimodal work — including the
+> Discover and interface layers, what was measured, and the known limitations — see
+> [MULTIMODAL_PROJECT.md](./MULTIMODAL_PROJECT.md).
+
 The portal started as a transcript search engine: recordings in, sentence chunks out, one text
 embedding model over the lot. This document covers the extension to **unified multimodal search** —
 recordings, documents, and images retrieved by a single query, out of a single vector space.
@@ -65,8 +69,11 @@ One more thing ranking has to do: **cap results per source**. Transcripts outnum
 the top four from one deposition. `maxPerSource` (default 3) keeps the unified list showing the
 range of material that matched.
 
-Every result keeps its raw `certainty`, and the "Show scores" toggle surfaces `rank`, `raw`, and
-which modality produced the vector.
+Every result keeps its raw `certainty`. The "Show scores" toggle surfaces a single 0-100 match
+percentage so the two retrieval modes are comparable; the raw certainty, the calibrated rank, and
+which modality produced the vector are in the tooltip. See
+[MULTIMODAL_PROJECT.md](./MULTIMODAL_PROJECT.md#layer-5--the-interface) for why semantic is shown
+absolute while keyword is shown relative to the query's best hit.
 
 ## Two retrieval modes
 
