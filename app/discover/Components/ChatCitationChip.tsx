@@ -2,6 +2,9 @@
 
 import React from 'react';
 import { Box, Tooltip } from '@mui/material';
+import ArticleIcon from '@mui/icons-material/Article';
+import ImageIcon from '@mui/icons-material/Image';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import { darken } from '@mui/material/styles';
 import { Citation } from '@/types/chat';
 import { useChatStore } from '@/app/stores/useChatStore';
@@ -20,6 +23,42 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+
+/**
+ * How each kind of citation looks inline.
+ *
+ * Colour alone was doing the work and doing it badly: images and chapter summaries were both
+ * green, and documents sat a shade away from recordings, so a reader scanning a paragraph
+ * could not tell what a claim rested on. Each kind now differs in three ways at once —
+ * colour, shape, and a glyph — which survives both a fast scan and colour-blindness.
+ *
+ * Recordings keep the bare number and the pill shape they have always had, since they are
+ * the common case and the baseline a reader learns first.
+ */
+type CitationLook = {
+  bg: string;
+  radius: string;
+  Icon: typeof ArticleIcon | null;
+  label: string;
+};
+
+function citationLook(citation: Citation): CitationLook {
+  if (citation.sourceType === 'image') {
+    return { bg: IMAGE_COLOR, radius: '50%', Icon: ImageIcon, label: 'Image' };
+  }
+  if (citation.sourceType === 'document') {
+    return { bg: DOCUMENT_COLOR, radius: '2px', Icon: ArticleIcon, label: 'Document' };
+  }
+  if (citation.isChapterSynopsis) {
+    return { bg: colors.success.main, radius: '9px', Icon: AutoStoriesIcon, label: 'Chapter summary' };
+  }
+  return { bg: colors.primary.main, radius: '9px', Icon: null, label: 'Recording' };
+}
+
+/** Amber for produced documents and violet for images: far from the blues and greens above. */
+const DOCUMENT_COLOR = '#b06a00';
+const IMAGE_COLOR = '#7b4bc4';
+
 export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
   const setActiveCitation = useChatStore((s) => s.setActiveCitation);
   const setHoveredCitationIndex = useChatStore((s) => s.setHoveredCitationIndex);
@@ -32,10 +71,11 @@ export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
     (!activeAssistantMessageId || !messageId || activeAssistantMessageId === messageId);
 
   const isExhibit = citation.sourceType === 'document' || citation.sourceType === 'image';
+  const look = citationLook(citation);
 
   const tooltipContent = isExhibit
     ? [
-        citation.sourceType === 'image' ? 'Image' : 'Document',
+        look.label,
         `"${citation.interviewTitle}"`,
         citation.pageCount && citation.pageCount > 1 ? `page ${citation.page} of ${citation.pageCount}` : '',
         citation.batesNumber ? `Bates ${citation.batesNumber}` : '',
@@ -45,8 +85,8 @@ export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
         .filter(Boolean)
         .join(' · ')
     : citation.isChapterSynopsis
-      ? `Chapter Summary — "${citation.interviewTitle}" · ${citation.sectionTitle}`
-      : `${citation.speaker} — "${citation.interviewTitle}" (${formatTime(citation.startTime)})`;
+      ? `${look.label} — "${citation.interviewTitle}" · ${citation.sectionTitle}`
+      : `${look.label} · ${citation.speaker} — "${citation.interviewTitle}" (${formatTime(citation.startTime)})`;
 
   return (
     <Tooltip title={tooltipContent} arrow placement="top">
@@ -67,19 +107,12 @@ export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          // Colour by source type, matching the accents the unified search page uses, so a
-          // reader can tell at a glance whether a claim rests on testimony or on a document.
-          bgcolor: isExhibit
-            ? citation.sourceType === 'image'
-              ? colors.success.main
-              : colors.info?.main ?? colors.primary.main
-            : citation.isChapterSynopsis
-              ? colors.success.main
-              : colors.primary.main,
+          gap: 0.25,
+          bgcolor: look.bg,
           color: colors.primary.contrastText,
           fontSize: '0.7rem',
           fontWeight: 700,
-          borderRadius: '4px',
+          borderRadius: look.radius,
           px: 0.6,
           py: 0.1,
           mx: 0.3,
@@ -90,12 +123,13 @@ export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
           transition: 'all 0.15s',
           ...(isHighlighted && {
             transform: 'scale(1.3)',
-            boxShadow: `0 0 0 2px ${colors.background.paper}, 0 0 0 4px ${citation.isChapterSynopsis ? colors.success.main : colors.primary.main}`,
+            boxShadow: `0 0 0 2px ${colors.background.paper}, 0 0 0 4px ${look.bg}`,
           }),
           '&:hover': {
-            bgcolor: citation.isChapterSynopsis ? darken(colors.success.main, 0.12) : colors.primary.dark,
+            bgcolor: darken(look.bg, 0.14),
           },
         }}>
+        {look.Icon && <look.Icon sx={{ fontSize: '0.72rem' }} />}
         {citation.index}
       </Box>
     </Tooltip>
