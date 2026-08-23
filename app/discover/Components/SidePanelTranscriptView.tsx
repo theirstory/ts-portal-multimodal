@@ -338,7 +338,7 @@ export const SidePanelTranscriptView = () => {
 
   if (!transcriptCitation) return null;
 
-  const backLabel = previousMode === 'search' ? 'Back to results' : 'Back to source';
+  const backLabel = previousMode === 'search' ? 'Back to results' : 'Back to sources';
   const hasResults = totalMatches > 0;
   const showMatchNavigation = !!searchTerm.trim() && hasResults;
   const placeholder =

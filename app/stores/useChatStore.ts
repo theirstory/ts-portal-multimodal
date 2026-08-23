@@ -509,6 +509,11 @@ export const useChatStore = create<ChatStore>()(
               sidePanelMode: state.previousMode ?? 'hidden',
               previousMode: null,
               transcriptCitation: null,
+              // Land on the list of sources. There used to be a single-source view between
+              // the list and the transcript, and going back meant returning to it; now that
+              // a citation opens the transcript directly, that step no longer exists and
+              // returning to it would strand the reader on a page they never chose.
+              sidePanelDetailView: false,
             }),
             false,
             'goBack',

@@ -9,6 +9,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { colors } from '@/lib/theme';
 import { useChatStore } from '@/app/stores/useChatStore';
 import { SidePanelTranscriptView } from '@/app/discover/Components/SidePanelTranscriptView';
+import { ChatInteractionProvider } from '@/app/discover/ChatInteractionContext';
 import type { MultimodalResult } from '@/lib/weaviate/multimodalSearch';
 
 type Props = {
@@ -85,7 +86,14 @@ export function RecordingDetailDrawer({ result, onClose }: Props) {
           </Box>
 
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <SidePanelTranscriptView />
+            {/*
+              The transcript view's back button returns to Discover's source list, which does
+              not exist here. In a drawer the only sensible "back" is out, so it closes —
+              this is what the interaction context's onGoBack override is for.
+            */}
+            <ChatInteractionProvider value={{ onGoBack: onClose }}>
+              <SidePanelTranscriptView />
+            </ChatInteractionProvider>
           </Box>
         </Box>
       )}
