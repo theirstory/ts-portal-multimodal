@@ -314,7 +314,12 @@ export function MultimodalSearchPage() {
               // Two columns on a wide screen: these cards are short, and one narrow column
               // left most of the page empty.
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+              // minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), and an auto minimum
+              // refuses to shrink below the intrinsic width of its content. The card's title
+              // and detail lines are nowrap, so their intrinsic width is the whole
+              // untruncated string — which pushed both columns past the viewport and put a
+              // horizontal scrollbar under the results instead of ellipsising.
+              gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) minmax(0, 1fr)' },
               gap: 1,
               alignContent: 'start',
               '&::-webkit-scrollbar': { width: '8px' },

@@ -213,6 +213,7 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
               sx={{
                 color: colors.text?.secondary,
                 fontSize: '0.66rem',
+                minWidth: 0,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
