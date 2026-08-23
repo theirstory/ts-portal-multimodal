@@ -714,6 +714,8 @@ async def health():
         ),
         "use_gpu": Config.USE_GPU,
         "embedding_device": LocalEmbedding.get_device(),
+        "embedding_dtype_requested": Config.EMBEDDING_DTYPE,
+        "embedding_dtype_loaded": LocalEmbedding.get_dtype(),
         "supports_images": LocalEmbedding.supports_images() if LocalEmbedding.is_loaded() else None,
         "labels_count": len(NER_LABELS),
         "min_text_length_for_ner": Config.MIN_TEXT_LENGTH_FOR_NER,

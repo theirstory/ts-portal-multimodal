@@ -204,6 +204,7 @@ Relevant settings, all overridable by environment variable:
 |---|---|---|
 | `EMBEDDING_MODEL` | `Qwen/Qwen3-VL-Embedding-2B` | A text-only model here disables image ingest, and `/embed-multimodal` will say so rather than fail obscurely |
 | `EMBEDDING_DEVICE` | auto (`cuda` → `mps` → `cpu`) | `USE_GPU=true` still selects CUDA |
+| `EMBEDDING_DTYPE` | `float32` | Passed explicitly: unset is ~4200 ms/query on CPU, `float32` 232 ms at 5.3 GB, `bfloat16` 439 ms at 3.2 GB. Vectors agree to cos 0.9999, so it is a memory/speed choice. Verify with `/health` |
 | `EMBEDDING_TRUNCATE_DIM` | `0` (native 2048) | Matryoshka truncation; changing it requires recreating collections |
 | `EMBEDDING_IMAGE_BATCH_SIZE` | `2` | Images are far heavier than text |
 | `EMBEDDING_IMAGE_MAX_EDGE` | `1600` | Bounds peak memory on large scans |
