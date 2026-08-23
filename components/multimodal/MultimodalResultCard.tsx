@@ -10,6 +10,7 @@ import GraphicEqOutlinedIcon from '@mui/icons-material/GraphicEqOutlined';
 import MovieOutlinedIcon from '@mui/icons-material/MovieOutlined';
 import { AudioFileWave } from '@/app/assets/svg/AudioFileWave';
 import { colors } from '@/lib/theme';
+import { SOURCE_TYPE_COLOR, sourceTypeTint } from '@/lib/theme/sourceTypes';
 import type { MultimodalResult, SourceType } from '@/lib/weaviate/multimodalSearch';
 
 type Props = {
@@ -26,12 +27,8 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   image: 'Image',
 };
 
-/** Distinct accent per source type, so a mixed result list stays scannable. */
-const SOURCE_ACCENTS: Record<SourceType, string> = {
-  recording: colors.primary.main,
-  document: colors.info?.main ?? '#2f6f9f',
-  image: colors.success?.main ?? '#3f7d58',
-};
+/** The shared palette, so a colour means the same thing here as in a Discover answer. */
+const SOURCE_ACCENTS = SOURCE_TYPE_COLOR;
 
 function formatTimecode(seconds?: number): string {
   if (seconds === undefined || Number.isNaN(seconds)) return '';
@@ -161,6 +158,7 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
         py: 1.25,
         borderRadius: 1.5,
         border: `1px solid ${colors.grey[200]}`,
+        borderLeft: `4px solid ${accent}`,
         backgroundColor: colors.common?.white ?? '#fff',
         cursor: 'pointer',
         transition: 'box-shadow 120ms ease, border-color 120ms ease',
@@ -171,9 +169,19 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
 
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.25 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, color: accent }}>
-            <SourceIcon result={result} fontSize={15} />
-            <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.3, fontSize: '0.66rem' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.4,
+              color: accent,
+              backgroundColor: sourceTypeTint(result.sourceType),
+              borderRadius: 0.75,
+              px: 0.6,
+              py: 0.15,
+            }}>
+            <SourceIcon result={result} fontSize={14} />
+            <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.3, fontSize: '0.64rem' }}>
               {SOURCE_LABELS[result.sourceType].toUpperCase()}
             </Typography>
           </Box>

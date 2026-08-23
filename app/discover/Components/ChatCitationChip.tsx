@@ -10,6 +10,12 @@ import { Citation } from '@/types/chat';
 import { useChatStore } from '@/app/stores/useChatStore';
 import { useChatInteraction } from '@/app/discover/ChatInteractionContext';
 import { colors } from '@/lib/theme';
+import {
+  SOURCE_TYPE_COLOR,
+  SOURCE_TYPE_SHAPE,
+  SOURCE_TYPE_LABEL,
+  CHAPTER_SUMMARY_COLOR,
+} from '@/lib/theme/sourceTypes';
 
 type Props = {
   citation: Citation;
@@ -44,20 +50,36 @@ type CitationLook = {
 
 function citationLook(citation: Citation): CitationLook {
   if (citation.sourceType === 'image') {
-    return { bg: IMAGE_COLOR, radius: '50%', Icon: ImageIcon, label: 'Image' };
+    return {
+      bg: SOURCE_TYPE_COLOR.image,
+      radius: SOURCE_TYPE_SHAPE.image,
+      Icon: ImageIcon,
+      label: SOURCE_TYPE_LABEL.image,
+    };
   }
   if (citation.sourceType === 'document') {
-    return { bg: DOCUMENT_COLOR, radius: '2px', Icon: ArticleIcon, label: 'Document' };
+    return {
+      bg: SOURCE_TYPE_COLOR.document,
+      radius: SOURCE_TYPE_SHAPE.document,
+      Icon: ArticleIcon,
+      label: SOURCE_TYPE_LABEL.document,
+    };
   }
   if (citation.isChapterSynopsis) {
-    return { bg: colors.success.main, radius: '9px', Icon: AutoStoriesIcon, label: 'Chapter summary' };
+    return {
+      bg: CHAPTER_SUMMARY_COLOR,
+      radius: SOURCE_TYPE_SHAPE.recording,
+      Icon: AutoStoriesIcon,
+      label: 'Chapter summary',
+    };
   }
-  return { bg: colors.primary.main, radius: '9px', Icon: null, label: 'Recording' };
+  return {
+    bg: SOURCE_TYPE_COLOR.recording,
+    radius: SOURCE_TYPE_SHAPE.recording,
+    Icon: null,
+    label: SOURCE_TYPE_LABEL.recording,
+  };
 }
-
-/** Amber for produced documents and violet for images: far from the blues and greens above. */
-const DOCUMENT_COLOR = '#b06a00';
-const IMAGE_COLOR = '#7b4bc4';
 
 export const ChatCitationChip = ({ citation, siblings, messageId }: Props) => {
   const setActiveCitation = useChatStore((s) => s.setActiveCitation);

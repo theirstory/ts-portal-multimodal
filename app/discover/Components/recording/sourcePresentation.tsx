@@ -8,6 +8,7 @@ import { AudioFileWave } from '@/app/assets/svg/AudioFileWave';
 import { getMuxPlaybackId } from '@/app/utils/converters';
 import { colors } from '@/lib/theme';
 import { Citation } from '@/types/chat';
+import { SOURCE_TYPE_COLOR } from '@/lib/theme/sourceTypes';
 
 /**
  * How a cited source is presented in the sources panel.
@@ -124,7 +125,7 @@ export function SourceThumbnail({ source, alt, width = 64 }: ThumbnailProps) {
 
 /** Accent used down the left edge of a row, matching the citation chips. */
 export function sourceAccent(source: SourceLike, fallback: string): string {
-  if (source.sourceType === 'image') return colors.success?.main ?? fallback;
-  if (source.sourceType === 'document') return colors.info?.main ?? fallback;
+  if (source.sourceType === 'image') return SOURCE_TYPE_COLOR.image;
+  if (source.sourceType === 'document') return SOURCE_TYPE_COLOR.document;
   return fallback;
 }

@@ -4,22 +4,12 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import { Citation, CitationSourceType } from '@/types/chat';
-import { colors } from '@/lib/theme';
+import { SOURCE_TYPE_COLOR, SOURCE_TYPE_LABEL_PLURAL } from '@/lib/theme/sourceTypes';
 
 export const SOURCE_TYPE_ORDER: CitationSourceType[] = ['recording', 'document', 'image'];
 
-const LABELS: Record<CitationSourceType, string> = {
-  recording: 'Recordings',
-  document: 'Documents',
-  image: 'Images',
-};
-
-/** Matches the accents used on the unified search page and the citation chips. */
-const ACCENTS: Record<CitationSourceType, string> = {
-  recording: colors.primary.main,
-  document: colors.info?.main ?? '#2f6f9f',
-  image: colors.success?.main ?? '#3f7d58',
-};
+const LABELS = SOURCE_TYPE_LABEL_PLURAL;
+const ACCENTS = SOURCE_TYPE_COLOR;
 
 /** Citations predating multimodal Discover have no sourceType and are recordings. */
 export function citationSourceType(citation: Citation): CitationSourceType {
