@@ -56,6 +56,67 @@ def _resolve_device() -> str:
     return "cpu"
 
 
+def _resolve_model_kwargs() -> dict:
+    """Build the `model_kwargs` passed to SentenceTransformer.
+
+    The dtype is passed **explicitly** because leaving it unset is the slow path. Measured
+    on an M-series CPU, median over five queries after warm-up:
+
+        model_kwargs        loaded as   warm RSS   median query
+        (nothing)           bfloat16     2.6 GB      ~4200 ms
+        torch_dtype float32 float32      5.3 GB        232 ms
+        torch_dtype bfloat16 bfloat16    3.2 GB        439 ms
+
+    With no dtype, transformers leaves the weights lazily mapped and pays to materialise
+    them on every forward pass, which costs an order of magnitude. This never showed up in
+    local development because MPS does not take that path — but a Docker production deploy
+    on CPU would have served every semantic query in about four seconds.
+
+    float32 is the default here: fastest, and its vectors agree with bfloat16 to
+    cos 0.9999, so the choice is about memory and speed rather than retrieval quality.
+    bfloat16 trades roughly 2 GB of resident memory for roughly 200 ms per query, which is
+    the right trade on a small host. These are Apple Silicon numbers; the ordering should
+    hold on x86, where PyTorch's float32 CPU kernels are also the best optimised, but it is
+    worth re-measuring on the target box.
+
+    An unrecognised value falls back to float32 with a warning rather than raising: a typo
+    in a deployment variable should not take the service down.
+
+    Returns:
+        A dict for SentenceTransformer(model_kwargs=...). Only "library-default"
+        yields an empty dict, and it is documented as the slow option.
+    """
+    configured = (Config.EMBEDDING_DTYPE or "").strip().lower()
+
+    aliases = {
+        "": "float32",
+        "default": "float32",
+        "fp32": "float32",
+        "float32": "float32",
+        "auto": "auto",
+        "bf16": "bfloat16",
+        "bfloat16": "bfloat16",
+        "fp16": "float16",
+        "float16": "float16",
+    }
+
+    # Escape hatch: let the library decide, i.e. pass nothing. Slow on CPU, kept only so the
+    # previous behaviour remains reachable without editing code.
+    if configured == "library-default":
+        return {}
+
+    resolved = aliases.get(configured)
+    if resolved is None:
+        logger.warning(
+            "[LocalEmbedding] Unrecognised EMBEDDING_DTYPE %r — using float32. Valid: "
+            "float32, bfloat16, float16, auto, library-default.",
+            Config.EMBEDDING_DTYPE,
+        )
+        resolved = "float32"
+
+    return {"torch_dtype": resolved}
+
+
 class LocalEmbedding:
     """Local embedding service backed by Hugging Face SentenceTransformers.
 
@@ -88,8 +149,13 @@ class LocalEmbedding:
                 timeout,
             )
 
+            model_kwargs = _resolve_model_kwargs()
+            logger.info("[LocalEmbedding] Loading with model_kwargs=%s", model_kwargs)
+
             executor = ThreadPoolExecutor(max_workers=1)
-            future = executor.submit(SentenceTransformer, model_name, device=device)
+            future = executor.submit(
+                SentenceTransformer, model_name, device=device, model_kwargs=model_kwargs
+            )
             try:
                 poll_seconds = 10
                 while True:
@@ -147,6 +213,25 @@ class LocalEmbedding:
     def get_device(cls) -> str:
         """Return the device the model is loaded on (resolving it if not yet loaded)."""
         return cls._device or _resolve_device()
+
+    @classmethod
+    def get_dtype(cls) -> Optional[str]:
+        """Return the dtype the weights actually loaded in, e.g. "torch.bfloat16".
+
+        Read off a real parameter rather than from config, so it reports what happened
+        rather than what was asked for — the point of exposing it is to confirm on a
+        deployed box that EMBEDDING_DTYPE took effect.
+
+        Returns:
+            The dtype as a string, or None if the model is not loaded or exposes no
+            parameters to inspect.
+        """
+        if cls._model is None:
+            return None
+        try:
+            return str(next(cls._model.parameters()).dtype)
+        except (StopIteration, AttributeError):
+            return None
 
     @classmethod
     def supports_images(cls) -> bool:

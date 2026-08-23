@@ -54,6 +54,19 @@ class Config:
     EMBEDDING_LOAD_TIMEOUT_SECONDS = int(
         os.getenv("EMBEDDING_LOAD_TIMEOUT_SECONDS", "600")
     )
+    # Torch dtype the weights load in, passed explicitly because leaving it unset is the
+    # slow path: transformers then keeps the weights lazily mapped and re-materialises them
+    # on every forward pass. Measured on an M-series CPU, median of five warm queries:
+    #
+    #   (unset)    -> bfloat16, 2.6 GB resident, ~4200 ms per query
+    #   float32    -> float32,  5.3 GB resident,    232 ms per query
+    #   bfloat16   -> bfloat16, 3.2 GB resident,    439 ms per query
+    #
+    # MPS does not take the slow path, so this only ever showed up on CPU — i.e. exactly in
+    # a Docker production deploy. float32 and bfloat16 vectors agree to cos 0.9999, so this
+    # is a memory-versus-speed choice, not a quality one: bfloat16 saves ~2 GB for ~200 ms.
+    # Values: float32 (default), bfloat16, float16, auto, library-default.
+    EMBEDDING_DTYPE = os.getenv("EMBEDDING_DTYPE", "float32")
     # Matryoshka truncation. 0 keeps the model's native width (2048 for Qwen3-VL-Embedding).
     # Changing this changes the vector width, so it requires recreating Weaviate collections.
     EMBEDDING_TRUNCATE_DIM = int(os.getenv("EMBEDDING_TRUNCATE_DIM", "0"))
@@ -105,6 +118,7 @@ class Config:
         print(f"[Config] Embedding model: {cls.EMBEDDING_MODEL}")
         print(f"[Config] Use GPU: {cls.USE_GPU}")
         print(f"[Config] Embedding device override: {cls.EMBEDDING_DEVICE or '(auto)'}")
+        print(f"[Config] Embedding dtype: {cls.EMBEDDING_DTYPE}")
         print(f"[Config] Embedding truncate dim: {cls.EMBEDDING_TRUNCATE_DIM or '(native)'}")
         print(f"[Config] Embedding image batch size: {cls.EMBEDDING_IMAGE_BATCH_SIZE}")
         print(f"[Config] Embedding image max edge: {cls.EMBEDDING_IMAGE_MAX_EDGE}")
