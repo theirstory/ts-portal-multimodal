@@ -232,8 +232,30 @@ function cacheSet(key: string, value: unknown): void {
   passageCache.set(key, value);
 }
 
+/**
+ * Whether to locate passages at all.
+ *
+ * This is the most expensive thing the portal does: it embeds the query plus up to
+ * MAX_PASSAGES passages of ~TARGET_PASSAGE_WORDS words each, which is on the order of two
+ * thousand tokens through a 2B model, against four tokens for a search query. On a GPU or
+ * Apple MPS that is about 1.3 s. On a CPU-only host it measured over ten minutes and did
+ * not finish, which is worse than useless: the search page fires a prefetch for the top
+ * page result after every semantic search, so each search would launch a background job
+ * that saturates the box and slows the searches that follow.
+ *
+ * Set PASSAGE_LOCALIZATION=off on hosts without a GPU. Pages then keep their literal
+ * query-term marks and simply do not get the passage band.
+ */
+const LOCALIZATION_ENABLED = (process.env.PASSAGE_LOCALIZATION ?? 'on').toLowerCase() !== 'off';
+
 export async function POST(request: Request) {
   try {
+    if (!LOCALIZATION_ENABLED) {
+      // Answer in the same shape as a page with no text layer, so callers need no special
+      // case: no band is drawn, and the prefetch costs nothing.
+      return NextResponse.json({ passages: [], reason: 'disabled' });
+    }
+
     const body = (await request.json()) as { imageUrl?: string; query?: string };
     const query = (body.query ?? '').trim();
     const imageUrl = (body.imageUrl ?? '').trim();
