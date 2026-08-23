@@ -42,7 +42,6 @@ export function MultimodalSearchPage() {
   const {
     query,
     results,
-    perTypeCounts,
     typeCounts,
     activeSourceTypes,
     loading,
@@ -266,9 +265,6 @@ export function MultimodalSearchPage() {
           {showingResults && (
             <Typography variant="caption" color="text.secondary">
               {browsing ? `Browsing ${results.length} items` : `${results.length} results`}
-              {showScores && !browsing
-                ? ` · candidates ${perTypeCounts.recording}/${perTypeCounts.document}/${perTypeCounts.image}`
-                : ''}
             </Typography>
           )}
         </Box>

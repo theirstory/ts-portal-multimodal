@@ -40,6 +40,23 @@ function formatTimecode(seconds?: number): string {
   return hours ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${minutes}:${pad(secs)}`;
 }
 
+/**
+ * The span the excerpt covers, as "44:31–44:58".
+ *
+ * Weaviate gives an end time for most chunks but not all, so a lone start is shown on its
+ * own rather than as an open-ended range.
+ */
+function formatSpan(start?: number, end?: number): string {
+  if (start === undefined || Number.isNaN(start)) return '';
+  const from = formatTimecode(start);
+  if (end === undefined || Number.isNaN(end) || end <= start) return from;
+  return `${from}–${formatTimecode(end)}`;
+}
+
+function clamp01(value: number): number {
+  return Math.max(Math.min(value, 1), 0);
+}
+
 function SourceIcon({ result, fontSize = 17 }: { result: MultimodalResult; fontSize?: number }) {
   const sx = { fontSize };
 
@@ -92,22 +109,6 @@ function Thumbnail({ result, accent }: { result: MultimodalResult; accent: strin
         </Box>
       )}
 
-      {result.sourceType === 'recording' && result.startTime !== undefined && (
-        <Box
-          sx={{
-            position: 'absolute',
-            bottom: 2,
-            right: 2,
-            px: 0.4,
-            borderRadius: 0.5,
-            fontSize: '0.62rem',
-            backgroundColor: colors.common?.overlay ?? 'rgba(0,0,0,0.65)',
-            color: '#fff',
-          }}>
-          {formatTimecode(result.startTime)}
-        </Box>
-      )}
-
       {result.sourceType !== 'recording' && result.pageCount !== undefined && result.pageCount > 1 && (
         <Box
           sx={{
@@ -138,7 +139,26 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
   // A top score of zero means nothing was ranked — the browse listing — so the bar is
   // hidden rather than drawn empty next to a meaningless 0.00.
   const ranked = topScore > 0;
-  const relative = ranked ? Math.max(Math.min(result.score / topScore, 1), 0) : 0;
+  // Match strength as one 0-100 scale across both retrievals, since a bare BM25 6.7 beside a
+  // semantic 0.82 said nothing about which was the better hit.
+  //
+  // The two are computed differently because they have to be. A semantic score is a
+  // calibrated certainty already on 0-1, so it converts directly. BM25 is unbounded and
+  // corpus-dependent, with no ceiling to divide by, so a keyword hit is scored against the
+  // best hit for this query. Dividing semantic scores by the top hit as well would have been
+  // tidier but worse: they cluster so tightly that the whole 40-result set spanned 100% down
+  // to only 75%, so the last and weakest result on the page would still have claimed 75%.
+  const match = !ranked
+    ? 0
+    : result.mode === 'keyword'
+      ? Math.round(clamp01(result.score / topScore) * 100)
+      : Math.round(clamp01(result.score) * 100);
+  const relative = match / 100;
+  const span = result.sourceType === 'recording' ? formatSpan(result.startTime, result.endTime) : '';
+  const detail =
+    result.sourceType === 'recording'
+      ? [span, result.speaker, result.sectionTitle].filter(Boolean).join(' · ')
+      : '';
 
   return (
     <Box
@@ -168,7 +188,7 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
       <Thumbnail result={result} accent={accent} />
 
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap', mb: 0.25 }}>
           <Box
             sx={{
               display: 'flex',
@@ -179,6 +199,7 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
               borderRadius: 0.75,
               px: 0.6,
               py: 0.15,
+              flexShrink: 0,
             }}>
             <SourceIcon result={result} fontSize={14} />
             <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.3, fontSize: '0.64rem' }}>
@@ -187,12 +208,6 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
           </Box>
 
           {result.exhibitNumber && (
-            <Typography variant="caption" sx={{ color: colors.text?.secondary, fontSize: '0.66rem' }}>
-              {result.exhibitNumber}
-            </Typography>
-          )}
-
-          {result.sourceType === 'recording' && result.sectionTitle && (
             <Typography
               variant="caption"
               sx={{
@@ -201,10 +216,8 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                maxWidth: 320,
               }}>
-              {result.speaker ? `${result.speaker} · ` : ''}
-              {result.sectionTitle}
+              {result.exhibitNumber}
             </Typography>
           )}
 
@@ -215,8 +228,8 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
             <Tooltip
               title={
                 result.mode === 'keyword'
-                  ? `BM25 relevance ${result.score.toFixed(2)} — how well the exact terms match this text.`
-                  : `Rank ${result.score.toFixed(3)} = raw certainty ${result.certainty.toFixed(3)} minus this source type's calibration offset.` +
+                  ? `${match}% as strong a term match as the top hit for this query (BM25 ${result.score.toFixed(2)}). BM25 has no fixed ceiling, so keyword matches are scored against the best hit.`
+                  : `${match}% match. Raw certainty ${result.certainty.toFixed(3)}, ranked at ${result.score.toFixed(3)} after this source type's calibration offset.` +
                     (result.embeddedModality ? ` Embedded as ${result.embeddedModality}.` : '')
               }>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
@@ -226,8 +239,14 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
                 {showScores && (
                   <Typography
                     variant="caption"
-                    sx={{ fontFamily: 'monospace', fontSize: '0.64rem', color: colors.text?.secondary }}>
-                    {result.mode === 'keyword' ? result.score.toFixed(1) : result.score.toFixed(2)}
+                    sx={{
+                      fontFamily: 'monospace',
+                      fontSize: '0.64rem',
+                      color: colors.text?.secondary,
+                      minWidth: 30,
+                      textAlign: 'right',
+                    }}>
+                    {match}%
                   </Typography>
                 )}
               </Box>
@@ -266,6 +285,28 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
           // Photographs carry no OCR text at all: they were retrieved from the image alone.
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.82rem', fontStyle: 'italic' }}>
             No text on this page — matched on the image itself.
+          </Typography>
+        )}
+
+        {/*
+          Where the excerpt sits, who is speaking, and which chapter it falls in. This used to
+          share the top line with the type badge and the score, which left four things
+          competing for one row: the chapter title was cut to an ellipsis and the score wrapped
+          onto a line of its own. Underneath the snippet it has the width to be read.
+        */}
+        {detail && (
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              mt: 0.4,
+              color: colors.text?.secondary,
+              fontSize: '0.7rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+            {detail}
           </Typography>
         )}
       </Box>
