@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { Box, Button, InputAdornment, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -12,6 +14,12 @@ import { colors } from '@/lib/theme';
 import { getMuxPlaybackId } from '@/app/utils/converters';
 import { highlightSearchText } from '@/app/indexes/highlightSearch';
 import { formatTime, groupByRecording } from './helpers';
+import {
+  SourceTypeFilter,
+  filterBySourceTypes,
+  SOURCE_TYPE_ORDER,
+} from '@/app/discover/Components/SourceTypeFilter';
+import type { CitationSourceType } from '@/types/chat';
 
 type SourcesListMode = 'recording' | 'number';
 
@@ -38,15 +46,29 @@ export function FloatingChatSourcesView({
   onToggleCollapse,
   onSelectCitation,
 }: FloatingChatSourcesViewProps) {
+  // View-local: which kinds of source to show. Kept here rather than lifted, because
+  // nothing outside this panel needs to know about it.
+  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([...SOURCE_TYPE_ORDER]);
+
+  const toggleType = (sourceType: CitationSourceType) =>
+    setActiveTypes((current) =>
+      current.includes(sourceType)
+        ? current.filter((type) => type !== sourceType)
+        : [...current, sourceType],
+    );
+
   const filteredCitations = (() => {
+    const byType = filterBySourceTypes(citations, activeTypes);
     const normalized = filterTerm.trim().toLowerCase();
-    if (!normalized) return citations;
-    return citations.filter(
+    if (!normalized) return byType;
+    return byType.filter(
       (citation) =>
         citation.interviewTitle.toLowerCase().includes(normalized) ||
         citation.sectionTitle.toLowerCase().includes(normalized) ||
         citation.transcription.toLowerCase().includes(normalized) ||
-        citation.speaker.toLowerCase().includes(normalized),
+        citation.speaker.toLowerCase().includes(normalized) ||
+        (citation.batesNumber ?? '').toLowerCase().includes(normalized) ||
+        (citation.exhibitNumber ?? '').toLowerCase().includes(normalized),
     );
   })();
 
@@ -120,6 +142,7 @@ export function FloatingChatSourcesView({
           }}
           sx={{ bgcolor: colors.background.default, borderRadius: '8px' }}
         />
+        <SourceTypeFilter citations={citations} active={activeTypes} onToggle={toggleType} />
       </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>

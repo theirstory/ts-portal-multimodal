@@ -12,6 +12,8 @@ import MuxPlayerElement from '@mux/mux-player';
 import { useChatStore } from '@/app/stores/useChatStore';
 import { Citation } from '@/types/chat';
 import { CitationExhibitView } from './CitationExhibitView';
+import { SourceTypeFilter, filterBySourceTypes, SOURCE_TYPE_ORDER } from './SourceTypeFilter';
+import type { CitationSourceType } from '@/types/chat';
 import { colors } from '@/lib/theme';
 import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { CitationBadge, GroupedSourcesView, NumberedSourcesView } from './recording/RecordingSourcesViews';
@@ -30,6 +32,14 @@ export const SidePanelRecordingView = () => {
   const hasSiblings = activeCitationSiblings.length > 1;
   const [filterTerm, setFilterTerm] = useState('');
   const [listMode, setListMode] = useState<'recording' | 'number'>('recording');
+  const [activeTypes, setActiveTypes] = useState<CitationSourceType[]>([...SOURCE_TYPE_ORDER]);
+
+  const toggleType = (sourceType: CitationSourceType) =>
+    setActiveTypes((current) =>
+      current.includes(sourceType)
+        ? current.filter((type) => type !== sourceType)
+        : [...current, sourceType],
+    );
 
   // Sync video time when active citation changes
   useEffect(() => {
@@ -39,24 +49,29 @@ export const SidePanelRecordingView = () => {
     }
   }, [activeCitation]);
 
-  // Reset filter when switching to list
+  // Reset filters when switching to list
   useEffect(() => {
     if (!sidePanelDetailView) {
       setFilterTerm('');
+      setActiveTypes([...SOURCE_TYPE_ORDER]);
     }
   }, [sidePanelDetailView]);
 
   const filteredCitations = useMemo(() => {
+    const byType = filterBySourceTypes(activeCitationSiblings, activeTypes);
     const q = filterTerm.trim().toLowerCase();
-    if (!q) return activeCitationSiblings;
-    return activeCitationSiblings.filter(
+    if (!q) return byType;
+    return byType.filter(
       (c) =>
         c.interviewTitle.toLowerCase().includes(q) ||
         c.sectionTitle.toLowerCase().includes(q) ||
         c.transcription.toLowerCase().includes(q) ||
-        c.speaker.toLowerCase().includes(q),
+        c.speaker.toLowerCase().includes(q) ||
+        // Documents are often looked up by the identifier a filing cites them by.
+        (c.batesNumber ?? '').toLowerCase().includes(q) ||
+        (c.exhibitNumber ?? '').toLowerCase().includes(q),
     );
-  }, [activeCitationSiblings, filterTerm]);
+  }, [activeCitationSiblings, filterTerm, activeTypes]);
 
   if (!activeCitation) return null;
 
@@ -178,7 +193,8 @@ export const SidePanelRecordingView = () => {
         }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="subtitle2" fontWeight={600}>
-            Sources ({activeCitationSiblings.length})
+            Sources ({filteredCitations.length}
+            {filteredCitations.length !== activeCitationSiblings.length ? ` of ${activeCitationSiblings.length}` : ''})
           </Typography>
           <ToggleButtonGroup
             size="small"
@@ -215,6 +231,7 @@ export const SidePanelRecordingView = () => {
           }}
           sx={{ bgcolor: colors.background.default, borderRadius: '8px' }}
         />
+        <SourceTypeFilter citations={activeCitationSiblings} active={activeTypes} onToggle={toggleType} />
       </Box>
       {/* Scrollable content — recording headers stick within this */}
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
