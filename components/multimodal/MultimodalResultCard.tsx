@@ -255,15 +255,17 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
         </Box>
 
         <Typography
-          variant="body2"
+          variant="caption"
           sx={{
+            display: 'block',
             fontWeight: 600,
+            fontSize: '0.72rem',
             lineHeight: 1.3,
-            mb: 0.25,
-            display: '-webkit-box',
-            WebkitLineClamp: 1,
-            WebkitBoxOrient: 'vertical',
+            mb: 0.35,
+            color: colors.text?.secondary,
             overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}>
           {result.title || 'Untitled'}
         </Typography>
@@ -271,11 +273,12 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
         {hasSnippet ? (
           <Typography
             variant="body2"
-            color="text.secondary"
             sx={{
-              fontSize: '0.82rem',
+              fontSize: '0.95rem',
+              lineHeight: 1.45,
+              color: colors.text?.primary,
               display: '-webkit-box',
-              WebkitLineClamp: 2,
+              WebkitLineClamp: 3,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
             }}>
