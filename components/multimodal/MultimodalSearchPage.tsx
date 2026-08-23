@@ -23,6 +23,7 @@ import { ALL_SOURCE_TYPES, useMultimodalSearchStore } from '@/app/stores/useMult
 import type { SearchMode, SourceType } from '@/lib/weaviate/multimodalSearch';
 import { MultimodalResultCard } from './MultimodalResultCard';
 import { ExhibitDetailDrawer } from './ExhibitDetailDrawer';
+import { RecordingDetailDrawer } from './RecordingDetailDrawer';
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   recording: 'Recordings',
@@ -308,18 +309,9 @@ export function MultimodalSearchPage() {
                 showScores={showScores}
                 topScore={topScore}
                 onSelect={(selected) => {
-                  // A transcript hit is only useful if it takes you to that moment, so
-                  // recordings open the story page seeked to the chunk. Exhibits have no
-                  // separate page, so they open in the detail drawer instead.
-                  if (selected.sourceType === 'recording') {
-                    if (!selected.storyId) return;
-                    const params = new URLSearchParams();
-                    params.set('start', String(selected.startTime ?? 0));
-                    params.set('end', String(selected.endTime ?? 0));
-                    window.open(`/story/${selected.storyId}?${params.toString()}`, '_blank');
-                    return;
-                  }
-
+                  // Everything opens in place. Sending recordings to a new tab lost the
+                  // result list, which is exactly what a reader is working from when
+                  // comparing several hits.
                   setSelectedResult(selected);
                   if (submittedQuery || query) {
                     router.replace(buildUrl(submittedQuery || query, mode, selected.uuid), { scroll: false });
@@ -339,8 +331,18 @@ export function MultimodalSearchPage() {
         )}
       </Box>
 
+      <RecordingDetailDrawer
+        result={selectedResult?.sourceType === 'recording' ? selectedResult : null}
+        onClose={() => {
+          setSelectedResult(null);
+          if (submittedQuery || query) {
+            router.replace(buildUrl(submittedQuery || query, mode), { scroll: false });
+          }
+        }}
+      />
+
       <ExhibitDetailDrawer
-        result={selectedResult}
+        result={selectedResult?.sourceType === 'recording' ? null : selectedResult}
         query={submittedQuery}
         onClose={() => {
           setSelectedResult(null);

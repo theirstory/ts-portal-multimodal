@@ -13,6 +13,14 @@ export function formatTime(seconds: number): string {
 }
 
 export type RecordingGroup = {
+  /**
+   * Unique per group, and safe as a React key.
+   *
+   * theirstoryId used to serve that purpose, but it is the empty string for a document or
+   * image, so once exhibits appeared every one of them keyed as "" and React warned about
+   * duplicate keys — which risks rows being reused or dropped between renders.
+   */
+  groupId: string;
   theirstoryId: string;
   interviewTitle: string;
   videoUrl: string;
@@ -46,6 +54,7 @@ export function groupByRecording(citations: Citation[]): RecordingGroup[] {
   const recordingMeta = new Map<
     string,
     {
+      groupId: string;
       theirstoryId: string;
       interviewTitle: string;
       videoUrl: string;
@@ -61,6 +70,7 @@ export function groupByRecording(citations: Citation[]): RecordingGroup[] {
       recordingMap.set(id, { chapters: [], clips: [] });
       recordingOrder.push(id);
       recordingMeta.set(id, {
+        groupId: id,
         theirstoryId: citation.theirstoryId,
         interviewTitle: citation.interviewTitle,
         videoUrl: citation.videoUrl,
@@ -98,6 +108,7 @@ export function groupByRecording(citations: Citation[]): RecordingGroup[] {
     ungroupedClips.sort((a, b) => (a.page ?? 0) - (b.page ?? 0) || a.startTime - b.startTime);
 
     return {
+      groupId: meta.groupId,
       theirstoryId: meta.theirstoryId,
       interviewTitle: meta.interviewTitle,
       videoUrl: meta.videoUrl,

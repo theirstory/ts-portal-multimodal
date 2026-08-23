@@ -290,7 +290,7 @@ export function GroupedSourcesView({
         });
 
         return (
-          <Box key={group.theirstoryId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
+          <Box key={group.groupId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
             <Box
               onClick={() => toggleCollapse(group.theirstoryId)}
               sx={{

@@ -403,10 +403,20 @@ export const useChatStore = create<ChatStore>()(
               }
             }
           }
+          // A citation names a moment, so clicking one should land on that moment with the
+          // transcript and chapters around it — not on a player behind an "open transcript"
+          // button. Exhibits have no transcript to open, so they keep the detail view, which
+          // for them shows the page image.
+          const isExhibit = citation.sourceType === 'document' || citation.sourceType === 'image';
+
           set(
             {
               activeCitation: citation,
-              sidePanelMode: 'recording',
+              sidePanelMode: isExhibit ? 'recording' : 'transcript',
+              transcriptCitation: isExhibit ? get().transcriptCitation : citation,
+              // Returning from the transcript should land back on the source list rather
+              // than on the interstitial that was just skipped.
+              previousMode: isExhibit ? get().previousMode : 'recording',
               activeCitationSiblings: siblings ?? [],
               citationOpenedViaChip: true,
               activePromptText: promptText,

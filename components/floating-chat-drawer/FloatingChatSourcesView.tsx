@@ -258,7 +258,7 @@ export function FloatingChatSourcesView({
               const isCollapsed = collapsed.has(group.theirstoryId);
 
               return (
-                <Box key={group.theirstoryId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
+                <Box key={group.groupId} sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
                   <Box
                     onClick={() => onToggleCollapse(group.theirstoryId)}
                     sx={{
