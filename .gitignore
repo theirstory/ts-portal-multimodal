@@ -58,3 +58,7 @@ tsconfig.tsbuildinfo
 /public/oida/
 /json/oida/corpus.json
 /json/oida/calibration.json
+
+# Weaviate volume backups produced by scripts/deploy/export-weaviate-data.sh
+weaviate-data.tar.gz
+*.tar.gz
