@@ -43,6 +43,7 @@ export function MultimodalSearchPage() {
     query,
     results,
     perTypeCounts,
+    typeCounts,
     activeSourceTypes,
     loading,
     hasSearched,
@@ -149,18 +150,6 @@ export function MultimodalSearchPage() {
     }
   }, [buildUrl, mode, query, router, setSelectedResult, submittedQuery]);
 
-  const resultsByType = React.useMemo(
-    () =>
-      results.reduce<Record<SourceType, number>>(
-        (acc, result) => {
-          acc[result.sourceType] += 1;
-          return acc;
-        },
-        { recording: 0, document: 0, image: 0 },
-      ),
-    [results],
-  );
-
   // Relevance bars are scaled against the best hit in the set, so they mean "how close to
   // the top result" rather than exposing an absolute cosine no reader can calibrate.
   const topScore = React.useMemo(
@@ -253,7 +242,9 @@ export function MultimodalSearchPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
           {ALL_SOURCE_TYPES.map((sourceType) => {
             const active = activeSourceTypes.includes(sourceType);
-            const count = results.length ? resultsByType[sourceType] : undefined;
+            // What exists for this query, not what survived the filter — a hidden type still
+            // says how much it is hiding.
+            const count = typeCounts[sourceType] || undefined;
             return (
               <Chip
                 key={sourceType}
