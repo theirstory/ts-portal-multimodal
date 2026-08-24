@@ -260,6 +260,11 @@ photographs that carry no text at all. Browse it at `/search` ("All sources").
 yarn oida:fetch
 yarn oida:ingest
 
+# Embed each page's passages once, so highlighting where a match sits costs a few
+# milliseconds at request time instead of ~2,000 tokens through the model. Run on a
+# machine with a GPU or MPS; the output ships with public/.
+yarn oida:precompute-passages
+
 # Prepare the recordings for TheirStory transcription (TheirStory has no ingest API)
 yarn oida:upload-manifest
 ```

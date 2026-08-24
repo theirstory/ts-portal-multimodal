@@ -166,11 +166,24 @@ float32 is faster but leaves only ~320 MB free with 2.2 GB of swap in constant u
 This CPU reports `avx2` but no `avx512f` or `avx512_bf16`, so bfloat16 is emulated here;
 a host with AVX512-BF16 should do better.
 
-**Set `PASSAGE_LOCALIZATION=off`.** Locating a passage embeds ~2,000 tokens against a
-query's four. It is ~1.3 s on MPS and **did not finish in ten minutes** on this droplet —
-and because the search page prefetches it for the top page result after every semantic
-search, leaving it on means every search launches a job that saturates all four cores.
-Pages keep their literal query-term marks; they just get no passage band.
+**Precompute the passage vectors, and set `PASSAGE_LOCALIZATION=off`.** Locating a passage
+used to embed ~2,000 tokens against a query's four. It was ~1.3 s on MPS and **did not finish
+in ten minutes** on this droplet — and because the search page prefetches it for the top page
+result after every semantic search, leaving it on meant every search launched a job that
+saturated all four cores.
+
+Run `yarn oida:precompute-passages` on a machine with a GPU or MPS and ship the output with
+`public/`. The vectors are 5.5 MB for this corpus, and the request then costs one query
+embedding plus a few dot products:
+
+| | On this droplet |
+|---|---|
+| First page of a new query | ~3.3 s (the query embedding) |
+| Every page after, same query | **~60 ms** |
+
+`PASSAGE_LOCALIZATION=off` then governs only the *fallback* for pages with no precomputed
+file — which on a CPU host should cost nothing rather than saturate it. Precomputed pages
+keep working, so the feature survives the deploy instead of being lost.
 
 **Restore the index rather than ingesting.** `export-weaviate-data.sh <backup> <user@host>
 <remote_path>` also syncs `config.json`, `json/`, and `public/` — the last matters here,
