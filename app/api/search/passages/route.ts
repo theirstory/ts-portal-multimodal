@@ -1,179 +1,49 @@
 import { NextResponse } from 'next/server';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  buildPassages,
+  cosineTyped,
+  decodeVectors,
+  groupIntoLines,
+  lineBoxes,
+  MIN_PASSAGE_SIMILARITY,
+  passagesFileFor,
+  wordsFileFor,
+  type PassageBox,
+  type StoredPassage,
+  type WordBox,
+} from '@/lib/passages/pagePassages';
 
 /**
  * Locate, on a page image, the passage a semantic search actually considered relevant.
  *
  * A page is embedded as one vector, so retrieval tells you the page matched but not where.
  * And because the match is semantic, the query's words are frequently nowhere on the page —
- * which is why term highlighting alone leaves a researcher scanning a dense two-column
- * scan by eye.
+ * which is why term highlighting alone leaves a researcher scanning a dense two-column scan
+ * by eye. This scores the page's own passages against the query with the same model that
+ * retrieved the page: a second, finer-grained pass of exactly the comparison that produced
+ * the hit, rather than a keyword approximation.
  *
- * This re-embeds the page's own passages, built from the positioned words extracted at
- * ingest, and scores them against the query with the same model that retrieved the page.
- * The best-scoring passage is returned as boxes to draw. It is a second, finer-grained pass
- * of exactly the comparison that produced the hit, rather than a keyword approximation.
- */
-
-type WordBox = { t: string; x: number; y: number; w: number; h: number; b?: number; l?: number };
-type Line = { words: WordBox[]; y: number; height: number; block: number; column: number };
-type Passage = { text: string; lines: Line[] };
-
-/**
- * Roughly a paragraph: long enough to carry meaning, short enough to localise.
+ * The passages' vectors are precomputed by `yarn oida:precompute-passages`, because a page's
+ * passages derive from its word coordinates and never change. Only the query needs embedding
+ * at request time.
  *
- * Each passage costs one forward pass of a 2B-parameter model, so this number is the whole
- * latency budget. At 45 words a dense page produced 24 passages and took 1.3-6s, which is
- * long enough that the highlight appeared well after the page image. Longer passages mean
- * fewer of them, trading a little precision for a response that lands with the image.
+ * This used to embed the passages on every request — about 2,000 tokens through a 2B model
+ * against the query's four. That was ~1.3 s on MPS and did not finish inside ten minutes on
+ * a CPU-only host, which was ruinous rather than merely slow: the search page prefetches
+ * this for its top page result, so every search launched a job that saturated the machine.
+ * Precomputed, a request costs one query embedding and a handful of dot products.
  */
-const TARGET_PASSAGE_WORDS = 95;
-/** Lines shared between neighbouring passages, so a match spanning a boundary is still found. */
-const PASSAGE_OVERLAP_LINES = 1;
-const MAX_PASSAGES = 14;
-/**
- * Left edges within this fraction of the page width belong to the same column. Poppler's
- * own <block> grouping is too fine to use for this — a block is frequently a single line,
- * so treating block boundaries as passage boundaries reduced every passage to one line and
- * dropped similarity from ~0.70 to ~0.25.
- */
-const COLUMN_GAP = 0.15;
-/** Cosine floor. Below this the page matched for reasons no single passage explains. */
-const MIN_PASSAGE_SIMILARITY = 0.35;
 
-/**
- * Group words into lines using the block/line indices poppler assigned, falling back to
- * vertical position for coordinate files written before those were recorded.
- *
- * This matters on multi-column pages: grouping by vertical position alone merges the left
- * and right columns into single lines, which garbles the passage text and produces
- * highlights spanning the whole page width instead of marking the passage.
- */
-function groupIntoLines(words: WordBox[]): Line[] {
-  const hasLayout = words.some((word) => typeof word.l === 'number' && word.l >= 0);
+type ScoredPassage = { similarity: number; passage: StoredPassage };
 
-  if (hasLayout) {
-    const byLine = new Map<string, Line>();
-
-    for (const word of words) {
-      const block = word.b ?? 0;
-      const key = `${block}:${word.l ?? 0}`;
-      const line = byLine.get(key);
-
-      if (line) {
-        line.words.push(word);
-        line.y = Math.min(line.y, word.y);
-        line.height = Math.max(line.height, word.h);
-        continue;
-      }
-
-      byLine.set(key, { words: [word], y: word.y, height: word.h, block, column: 0 });
-    }
-
-    const lines = [...byLine.values()];
-    for (const line of lines) line.words.sort((a, b) => a.x - b.x);
-    return assignColumns(lines);
-  }
-
-  const sorted = [...words].sort((a, b) => a.y - b.y || a.x - b.x);
-  const lines: Line[] = [];
-
-  for (const word of sorted) {
-    const current = lines[lines.length - 1];
-    if (current && Math.abs(current.y - word.y) < Math.max(word.h, current.height) * 0.6) {
-      current.words.push(word);
-      current.height = Math.max(current.height, word.h);
-      continue;
-    }
-    lines.push({ words: [word], y: word.y, height: word.h, block: 0, column: 0 });
-  }
-
-  for (const line of lines) line.words.sort((a, b) => a.x - b.x);
-  return assignColumns(lines);
-}
-
-/**
- * Assign each line to a column by clustering left edges, then order lines in reading order:
- * down one column, then down the next. This is what keeps a two-column page from
- * interleaving, while still letting a passage span consecutive paragraphs of one column.
- */
-function assignColumns(lines: Line[]): Line[] {
-  const edges = [...new Set(lines.map((line) => Math.min(...line.words.map((word) => word.x))))].sort(
-    (a, b) => a - b,
-  );
-
-  const columnStarts: number[] = [];
-  for (const edge of edges) {
-    if (!columnStarts.length || edge - columnStarts[columnStarts.length - 1] > COLUMN_GAP) {
-      columnStarts.push(edge);
-    }
-  }
-
-  for (const line of lines) {
-    const left = Math.min(...line.words.map((word) => word.x));
-    let column = 0;
-    for (let i = 0; i < columnStarts.length; i++) {
-      if (left >= columnStarts[i] - 0.001) column = i;
-    }
-    line.column = column;
-  }
-
-  return [...lines].sort((a, b) => a.column - b.column || a.y - b.y);
-}
-
-function buildPassages(lines: Line[]): Passage[] {
-  const passages: Passage[] = [];
-  let index = 0;
-
-  while (index < lines.length && passages.length < MAX_PASSAGES) {
-    const group: Line[] = [];
-    let wordCount = 0;
-
-    const startColumn = lines[index].column;
-
-    while (index < lines.length && wordCount < TARGET_PASSAGE_WORDS) {
-      // A passage that jumps columns is not a passage.
-      if (group.length && lines[index].column !== startColumn) break;
-      group.push(lines[index]);
-      wordCount += lines[index].words.length;
-      index += 1;
-    }
-
-    if (group.length) {
-      passages.push({
-        text: group.map((line) => line.words.map((word) => word.t).join(' ')).join(' '),
-        lines: group,
-      });
-    }
-
-    // Back up for overlap only when the group was long enough to spare a line. Backing up
-    // after a single-line group — which happens at every column boundary — would advance the
-    // index by nothing at all, spinning in place until MAX_PASSAGES and leaving the rest of
-    // the page unexamined.
-    if (index < lines.length && group.length > PASSAGE_OVERLAP_LINES) {
-      index -= PASSAGE_OVERLAP_LINES;
-    }
-  }
-
-  return passages;
-}
-
-/** One box per line, spanning that line's words. */
-function lineBoxes(lines: Line[]): { x: number; y: number; w: number; h: number }[] {
-  return lines.map((line) => {
-    const left = Math.min(...line.words.map((word) => word.x));
-    const right = Math.max(...line.words.map((word) => word.x + word.w));
-    const top = Math.min(...line.words.map((word) => word.y));
-    const bottom = Math.max(...line.words.map((word) => word.y + word.h));
-    return {
-      x: Number(left.toFixed(4)),
-      y: Number(top.toFixed(4)),
-      w: Number((right - left).toFixed(4)),
-      h: Number((bottom - top).toFixed(4)),
-    };
-  });
-}
+type Answer = {
+  passages: { similarity: number; text: string; boxes: PassageBox[] }[];
+  reason?: string;
+  considered?: number;
+  source?: 'precomputed' | 'live';
+};
 
 async function embedTexts(texts: string[]): Promise<number[][]> {
   const baseUrl = process.env.NLP_PROCESSOR_URL ?? 'http://nlp-processor:7070';
@@ -194,28 +64,14 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
   return body.vectors;
 }
 
-function cosine(a: number[], b: number[]): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (!normA || !normB) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-
 /**
- * Opening the same page twice, or reopening it from a shared link, should not re-embed
+ * Opening the same page twice, or reopening it from a shared link, should not recompute
  * anything. Keyed by page and query, which is exactly what the answer depends on.
  */
 const PASSAGE_CACHE_LIMIT = 400;
-const passageCache = new Map<string, unknown>();
+const passageCache = new Map<string, Answer>();
 
-function cacheGet(key: string): unknown {
+function cacheGet(key: string): Answer | undefined {
   const hit = passageCache.get(key);
   if (hit === undefined) return undefined;
   // Refresh recency so the map evicts genuinely cold entries.
@@ -224,38 +80,68 @@ function cacheGet(key: string): unknown {
   return hit;
 }
 
-function cacheSet(key: string, value: unknown): void {
+function cacheSet(key: string, value: Answer): Answer {
   if (passageCache.size >= PASSAGE_CACHE_LIMIT) {
     const oldest = passageCache.keys().next().value;
     if (oldest !== undefined) passageCache.delete(oldest);
   }
   passageCache.set(key, value);
+  return value;
 }
 
 /**
- * Whether to locate passages at all.
+ * Whether to fall back to embedding a page's passages when it has no precomputed file.
  *
- * This is the most expensive thing the portal does: it embeds the query plus up to
- * MAX_PASSAGES passages of ~TARGET_PASSAGE_WORDS words each, which is on the order of two
- * thousand tokens through a 2B model, against four tokens for a search query. On a GPU or
- * Apple MPS that is about 1.3 s. On a CPU-only host it measured over ten minutes and did
- * not finish, which is worse than useless: the search page fires a prefetch for the top
- * page result after every semantic search, so each search would launch a background job
- * that saturates the box and slows the searches that follow.
- *
- * Set PASSAGE_LOCALIZATION=off on hosts without a GPU. Pages then keep their literal
- * query-term marks and simply do not get the passage band.
+ * On a GPU or MPS host that fallback is a feature: a page added since the last precompute
+ * still gets a band. On a CPU-only host it is the pathological path described above, so set
+ * PASSAGE_LOCALIZATION=off there. Precomputed pages keep working either way — this governs
+ * only the fallback.
  */
-const LOCALIZATION_ENABLED = (process.env.PASSAGE_LOCALIZATION ?? 'on').toLowerCase() !== 'off';
+const LIVE_FALLBACK_ENABLED = (process.env.PASSAGE_LOCALIZATION ?? 'on').toLowerCase() !== 'off';
+
+/** Query vectors are reused across pages: opening three results for one query embeds once. */
+const QUERY_VECTOR_LIMIT = 200;
+const queryVectors = new Map<string, number[]>();
+
+async function queryVector(query: string): Promise<number[]> {
+  const cached = queryVectors.get(query);
+  if (cached) return cached;
+
+  const [vector] = await embedTexts([query]);
+  if (queryVectors.size >= QUERY_VECTOR_LIMIT) {
+    const oldest = queryVectors.keys().next().value;
+    if (oldest !== undefined) queryVectors.delete(oldest);
+  }
+  queryVectors.set(query, vector);
+  return vector;
+}
+
+function bestOf(
+  scored: ScoredPassage[],
+  considered: number,
+  source: 'precomputed' | 'live',
+): Answer {
+  const top = scored.sort((a, b) => b.similarity - a.similarity)[0];
+
+  if (!top || top.similarity < MIN_PASSAGE_SIMILARITY) {
+    return { passages: [], reason: 'below-threshold', considered, source };
+  }
+
+  return {
+    passages: [
+      {
+        similarity: Number(top.similarity.toFixed(4)),
+        text: top.passage.text.slice(0, 600),
+        boxes: top.passage.boxes,
+      },
+    ],
+    considered,
+    source,
+  };
+}
 
 export async function POST(request: Request) {
   try {
-    if (!LOCALIZATION_ENABLED) {
-      // Answer in the same shape as a page with no text layer, so callers need no special
-      // case: no band is drawn, and the prefetch costs nothing.
-      return NextResponse.json({ passages: [], reason: 'disabled' });
-    }
-
     const body = (await request.json()) as { imageUrl?: string; query?: string };
     const query = (body.query ?? '').trim();
     const imageUrl = (body.imageUrl ?? '').trim();
@@ -264,67 +150,75 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'imageUrl and query are required' }, { status: 400 });
     }
 
-    // Only ever read the generated word files, never an arbitrary path from the client.
+    // Only ever read the generated files, never an arbitrary path from the client.
     if (!/^\/oida\/pages\/[A-Za-z0-9_-]+\/p-\d+\.png$/.test(imageUrl)) {
       return NextResponse.json({ error: 'unsupported imageUrl' }, { status: 400 });
     }
 
-    const cacheKey = `${imageUrl}\u0000${query}`;
+    const cacheKey = `${imageUrl}::${query}`;
     const cached = cacheGet(cacheKey);
     if (cached !== undefined) {
-      return NextResponse.json(cached as Record<string, unknown>);
+      return NextResponse.json(cached);
     }
 
-    const wordsPath = path.join(process.cwd(), 'public', imageUrl.replace(/\.png$/, '.words.json'));
+    const publicDir = path.join(process.cwd(), 'public');
+
+    // Precomputed vectors: the ordinary path, and the only cheap one.
+    let stored: { width: number; passages: StoredPassage[]; vectors: string } | null = null;
+    try {
+      stored = JSON.parse(
+        await readFile(path.join(publicDir, passagesFileFor(imageUrl)), 'utf-8'),
+      ) as { width: number; passages: StoredPassage[]; vectors: string };
+    } catch {
+      stored = null;
+    }
+
+    if (stored?.passages?.length) {
+      const vectors = decodeVectors(stored.vectors, stored.width);
+      const vector = await queryVector(query);
+
+      const scored = stored.passages.map((passage, index) => ({
+        passage,
+        similarity: vectors[index] ? cosineTyped(vector, vectors[index]) : 0,
+      }));
+
+      return NextResponse.json(
+        cacheSet(cacheKey, bestOf(scored, stored.passages.length, 'precomputed')),
+      );
+    }
+
+    if (!LIVE_FALLBACK_ENABLED) {
+      // Same shape as a page with no text layer: no band, and the prefetch costs nothing.
+      return NextResponse.json(cacheSet(cacheKey, { passages: [], reason: 'not-precomputed' }));
+    }
 
     let words: WordBox[];
     try {
-      const parsed = JSON.parse(await readFile(wordsPath, 'utf-8')) as { words: WordBox[] };
+      const parsed = JSON.parse(
+        await readFile(path.join(publicDir, wordsFileFor(imageUrl)), 'utf-8'),
+      ) as { words: WordBox[] };
       words = parsed.words ?? [];
     } catch {
       // Scanned pages have no positioned text; that is expected, not an error.
-      const answer = { passages: [], reason: 'no-text-layer' };
-      cacheSet(cacheKey, answer);
-      return NextResponse.json(answer);
+      return NextResponse.json(cacheSet(cacheKey, { passages: [], reason: 'no-text-layer' }));
     }
 
     const passages = buildPassages(groupIntoLines(words));
     if (!passages.length) {
-      const answer = { passages: [], reason: 'no-passages' };
-      cacheSet(cacheKey, answer);
-      return NextResponse.json(answer);
+      return NextResponse.json(cacheSet(cacheKey, { passages: [], reason: 'no-passages' }));
     }
 
     const vectors = await embedTexts([query, ...passages.map((passage) => passage.text)]);
-    const queryVector = vectors[0];
+    const scored = passages.map((passage, index) => ({
+      passage: { text: passage.text, boxes: lineBoxes(passage.lines) },
+      similarity: cosineTyped(vectors[0], vectors[index + 1]),
+    }));
 
-    const scored = passages
-      .map((passage, index) => ({ passage, similarity: cosine(queryVector, vectors[index + 1]) }))
-      .sort((a, b) => b.similarity - a.similarity);
-
-    const best = scored[0];
-    if (!best || best.similarity < MIN_PASSAGE_SIMILARITY) {
-      const answer = { passages: [], reason: 'below-threshold', best: best?.similarity ?? 0 };
-      cacheSet(cacheKey, answer);
-      return NextResponse.json(answer);
-    }
-
-    const answer = {
-      passages: [
-        {
-          similarity: Number(best.similarity.toFixed(4)),
-          text: best.passage.text.slice(0, 600),
-          boxes: lineBoxes(best.passage.lines),
-        },
-      ],
-      considered: passages.length,
-    };
-
-    cacheSet(cacheKey, answer);
-    return NextResponse.json(answer);
+    return NextResponse.json(cacheSet(cacheKey, bestOf(scored, passages.length, 'live')));
   } catch (error) {
-    console.error('Passage localisation error:', error);
-    const message = error instanceof Error ? error.message : 'Passage localisation failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to locate passages' },
+      { status: 500 },
+    );
   }
 }

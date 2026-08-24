@@ -27,6 +27,7 @@
     "oida:upload-manifest": "tsx scripts/oida/theirstory-upload-manifest.ts",
     "oida:enrich-exports": "tsx scripts/oida/enrich-theirstory-exports.ts",
     "oida:extract-boxes": "tsx scripts/oida/extract-word-boxes.ts",
+    "oida:precompute-passages": "tsx scripts/oida/precompute-passages.ts",
     "oida:thumbnails": "tsx scripts/oida/render-thumbnails.ts",
     "oida:update-metadata": "tsx scripts/oida/update-exhibit-metadata.ts"
   },
