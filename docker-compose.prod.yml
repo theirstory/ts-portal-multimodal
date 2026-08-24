@@ -77,7 +77,15 @@ services:
     volumes:
       - ./config.json:/app/config.json:ro
     ports:
-      - "3000:3000"
+      # Bind address is configurable so a host running a reverse proxy can keep the app off
+      # the public interface. Docker publishes ports through its own iptables chain, which
+      # bypasses ufw entirely — so on a proxied host a firewall rule does not close this and
+      # anyone with the IP can reach the app directly, skipping TLS and whatever the proxy or
+      # CDN in front of it is doing. Set FRONTEND_BIND=127.0.0.1 there.
+      #
+      # Default stays 0.0.0.0 so the README's "http://YOUR_SERVER_IP:3000" still works on a
+      # plain deploy with nothing in front.
+      - "${FRONTEND_BIND:-0.0.0.0}:3000:3000"
     restart: unless-stopped
 
 volumes:

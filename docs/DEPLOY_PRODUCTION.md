@@ -131,3 +131,83 @@ Update deployment after `git pull`:
 ```bash
 ./scripts/deploy/deploy-prod.sh
 ```
+
+## Deploying the multimodal portal on a CPU-only host
+
+Measured on a DigitalOcean Premium AMD droplet, 4 vCPU / 8 GB / Ubuntu 24.04, serving the
+OIDA corpus (1,430 chunks, 88 exhibit pages, 9 recordings).
+
+The multimodal build differs from the text-only portal in one way that dominates everything
+else: `Qwen/Qwen3-VL-Embedding-2B` is a 2B-parameter model that has to be resident to answer
+a semantic query, and there is no GPU in the path.
+
+**Size for the model, not the corpus.** 8 GB is the floor. The index itself is tiny — the
+whole Weaviate volume is 42 MB — but the embedding model is 5.3 GB at float32.
+
+**Add swap before deploying.** DigitalOcean droplets ship with none, and with no swap an
+overshoot is killed outright rather than slowed down, which surfaces as a confusing build
+failure. 4 GB at `vm.swappiness=10` is enough to be a safety margin rather than working
+memory.
+
+**Set `EMBEDDING_DTYPE` explicitly.** Leaving it unset is the slow path — transformers
+re-materialises lazily-mapped weights on every forward pass. Measured on this droplet:
+
+| `EMBEDDING_DTYPE` | Resident | Cold first query | Warm query |
+|---|---|---|---|
+| unset | 2.6 GB | — | ~4200 ms |
+| `float32` | 5.3 GB | 99 s | **~1.0 s** |
+| `bfloat16` | 1.4 GB | 8 s | ~2.5 s |
+
+float32 is faster but leaves only ~320 MB free with 2.2 GB of swap in constant use, and the
+99 s cold start is swap thrashing. `bfloat16` is the right default on 8 GB: it gives up
+1.5 s per query for 6.3 GB of headroom and an 8 s cold start. Choose float32 only with
+16 GB. The two dtypes' vectors agree to `cos 0.9999`, so this is not a quality decision.
+
+This CPU reports `avx2` but no `avx512f` or `avx512_bf16`, so bfloat16 is emulated here;
+a host with AVX512-BF16 should do better.
+
+**Set `PASSAGE_LOCALIZATION=off`.** Locating a passage embeds ~2,000 tokens against a
+query's four. It is ~1.3 s on MPS and **did not finish in ten minutes** on this droplet —
+and because the search page prefetches it for the top page result after every semantic
+search, leaving it on means every search launches a job that saturates all four cores.
+Pages keep their literal query-term marks; they just get no passage band.
+
+**Restore the index rather than ingesting.** `export-weaviate-data.sh <backup> <user@host>
+<remote_path>` also syncs `config.json`, `json/`, and `public/` — the last matters here,
+since `public/oida` is 52 MB of page images and thumbnails the result cards need. Ingesting
+on CPU instead would mean embedding 88 page images at seconds apiece.
+
+What it looks like when it is working:
+
+| | |
+|---|---|
+| Keyword search | 51 ms |
+| Browse | 221 ms |
+| Semantic search (bfloat16) | ~2.5 s |
+| Discover turn, reading 2 page images | 14 s |
+
+### Behind Cloudflare (or any CDN)
+
+Two things bite on a proxied setup, and both leave the site working while quietly bypassed.
+
+**Docker's published port is not behind your firewall.** Docker inserts its own iptables
+rules, so `ufw allow`/`deny` does not govern a published port: after putting nginx in front
+and enabling ufw, `http://YOUR_IP:3000` was still answering 200 from the public internet.
+Anyone with the origin IP could skip TLS, the WAF, rate limiting, and caching. Set
+`FRONTEND_BIND=127.0.0.1` in a `.env` beside `docker-compose.prod.yml` — compose reads `.env`
+for interpolation, not `.env.production` — so the app is reachable only through the proxy.
+
+**nginx will happily serve the site to anyone hitting the IP directly.** Give it a
+`default_server` that closes the connection on an unrecognised `Host`, so only requests
+carrying the real hostname are served.
+
+Also worth setting on a Cloudflare origin:
+
+- `set_real_ip_from` for [Cloudflare's ranges](https://www.cloudflare.com/ips/) with
+  `real_ip_header CF-Connecting-IP`. Without it every request appears to come from a
+  Cloudflare edge address, so logs, rate limiting, and the Gatekeeper all see one client.
+- `proxy_read_timeout 300s` and `proxy_buffering off`, or Discover's streamed answer arrives
+  in one lump at the end and a slow semantic query can be cut off.
+- Cloudflare's SSL mode must match what the origin actually serves. With mode **Full** and no
+  TLS listener on the origin, every request returns **521** — Cloudflare connects to port 443
+  regardless of how the visitor arrived, so an origin serving only port 80 is unreachable.
