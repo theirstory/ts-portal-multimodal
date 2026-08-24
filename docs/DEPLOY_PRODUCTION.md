@@ -185,3 +185,29 @@ What it looks like when it is working:
 | Browse | 221 ms |
 | Semantic search (bfloat16) | ~2.5 s |
 | Discover turn, reading 2 page images | 14 s |
+
+### Behind Cloudflare (or any CDN)
+
+Two things bite on a proxied setup, and both leave the site working while quietly bypassed.
+
+**Docker's published port is not behind your firewall.** Docker inserts its own iptables
+rules, so `ufw allow`/`deny` does not govern a published port: after putting nginx in front
+and enabling ufw, `http://YOUR_IP:3000` was still answering 200 from the public internet.
+Anyone with the origin IP could skip TLS, the WAF, rate limiting, and caching. Set
+`FRONTEND_BIND=127.0.0.1` in a `.env` beside `docker-compose.prod.yml` — compose reads `.env`
+for interpolation, not `.env.production` — so the app is reachable only through the proxy.
+
+**nginx will happily serve the site to anyone hitting the IP directly.** Give it a
+`default_server` that closes the connection on an unrecognised `Host`, so only requests
+carrying the real hostname are served.
+
+Also worth setting on a Cloudflare origin:
+
+- `set_real_ip_from` for [Cloudflare's ranges](https://www.cloudflare.com/ips/) with
+  `real_ip_header CF-Connecting-IP`. Without it every request appears to come from a
+  Cloudflare edge address, so logs, rate limiting, and the Gatekeeper all see one client.
+- `proxy_read_timeout 300s` and `proxy_buffering off`, or Discover's streamed answer arrives
+  in one lump at the end and a slow semantic query can be cut off.
+- Cloudflare's SSL mode must match what the origin actually serves. With mode **Full** and no
+  TLS listener on the origin, every request returns **521** — Cloudflare connects to port 443
+  regardless of how the visitor arrived, so an origin serving only port 80 is unreachable.
