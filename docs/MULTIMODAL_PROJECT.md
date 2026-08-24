@@ -194,6 +194,10 @@ full transcript and chapters, rather than a new tab via an interstitial "Open tr
 - **Keyword's top hit is always 100%.** BM25 has no absolute ceiling, so keyword will read more
   confident than semantic on identical results.
 - **Text-layer coverage is 52/88 pages**, so on 36 pages the passage band is unavailable.
+- **Passage vectors must be precomputed on a GPU or MPS machine** (`yarn oida:precompute-passages`)
+  and shipped with `public/`. Embedding them per request is ~1.3 s on MPS and does not finish
+  inside ten minutes on a CPU-only host. Precomputed, it is ~60 ms per page after the query is
+  embedded.
 - **Recording ingest is manual.** TheirStory has no ingest API: media is downloaded, uploaded by
   hand, transcribed by TheirStory, then pulled back with `yarn theirstory:import-stories`.
 - **Archival metadata is exhibit-side only.** The equivalent fields on `Testimonies` were
