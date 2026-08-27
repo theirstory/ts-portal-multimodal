@@ -19,14 +19,34 @@ body {
 
 /* Mobile-specific styles */
 @media (max-width: 768px) {
-  /* Ensure touch targets are at least 44px for accessibility */
+  /*
+    Keep small controls thumb-sized. Deliberately scoped to real buttons: this used to also
+    match [role='button'] and every <a>, which broke layout in two ways on mobile Safari.
+
+    A specified min-height on a grid item makes WebKit size an auto grid row from that
+    min-height instead of from the item's content — so every search result card became a 32px
+    row with ~110px of content spilling over the cards below it (a wall of overlapping text).
+    Chrome sizes those rows from the content, which is why it only ever showed up on iPhones.
+    A bare min-width on <a> also stretches inline links inside running text.
+
+    So anything that is a layout box first and a control second sets its own touch target in
+    its component, where the height is known.
+  */
   button,
-  [role='button'],
   input[type='button'],
-  input[type='submit'],
-  a {
+  input[type='submit'] {
     min-height: 32px;
     min-width: 32px;
+  }
+
+  /*
+    MUI renders chips and several other controls as divs, so the selectors above miss them and
+    they would have lost the thumb-sized floor they have always had here. Height only: these
+    are controls that size themselves, never containers something else is laid out inside.
+  */
+  .MuiChip-root,
+  .MuiButtonBase-root {
+    min-height: 32px;
   }
 
   /* Improve mobile form elements */
