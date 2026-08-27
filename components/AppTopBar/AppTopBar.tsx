@@ -125,7 +125,14 @@ export const AppTopBar = () => {
                     fontSize: '11px',
                     fontWeight: 700,
                     letterSpacing: '0.06em',
-                    minHeight: 0,
+                    // 11px type gives an 17px-tall link, which is a hard thing to hit with a
+                    // thumb. The target grows around the label rather than the label growing:
+                    // these sit next to a logo on a 40px row and have to stay small to read as
+                    // navigation rather than as buttons.
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    minHeight: 40,
+                    px: 0.5,
                     opacity: 0.85,
                     transition: 'opacity 0.15s',
                     '&:hover': { opacity: 1 },

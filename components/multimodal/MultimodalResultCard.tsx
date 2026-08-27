@@ -83,8 +83,8 @@ function Thumbnail({ result, accent }: { result: MultimodalResult; accent: strin
       sx={{
         position: 'relative',
         flexShrink: 0,
-        width: { xs: 64, sm: 92 },
-        height: { xs: 64, sm: 92 },
+        width: { xs: 56, sm: 92 },
+        height: { xs: 56, sm: 92 },
         borderRadius: 1,
         overflow: 'hidden',
         border: `1px solid ${colors.grey[200]}`,
@@ -156,9 +156,7 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
   const relative = match / 100;
   const span = result.sourceType === 'recording' ? formatSpan(result.startTime, result.endTime) : '';
   const detail =
-    result.sourceType === 'recording'
-      ? [span, result.speaker, result.sectionTitle].filter(Boolean).join(' · ')
-      : '';
+    result.sourceType === 'recording' ? [span, result.speaker, result.sectionTitle].filter(Boolean).join(' · ') : '';
 
   return (
     <Box
@@ -173,14 +171,20 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
       }}
       sx={{
         display: 'flex',
-        gap: 1.5,
-        px: 1.5,
+        alignItems: 'flex-start',
+        gap: { xs: 1.25, sm: 1.5 },
+        px: { xs: 1.25, sm: 1.5 },
         py: 1.25,
         borderRadius: 1.5,
         border: `1px solid ${colors.grey[200]}`,
         borderLeft: `4px solid ${accent}`,
         backgroundColor: colors.common?.white ?? '#fff',
         cursor: 'pointer',
+        // A card is a layout box before it is a control, so its touch target comes from its
+        // own content rather than a global min-height on [role='button'] — see globals.css.
+        // `overflow: hidden` is the belt to that braces: whatever a browser does to this
+        // box's height, its text is clipped to it instead of printed over the next result.
+        overflow: 'hidden',
         transition: 'box-shadow 120ms ease, border-color 120ms ease',
         '&:hover': { boxShadow: 2, borderColor: accent },
         '&:focus-visible': { outline: `2px solid ${accent}`, outlineOffset: 2 },
@@ -234,7 +238,7 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
                     (result.embeddedModality ? ` Embedded as ${result.embeddedModality}.` : '')
               }>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-                <Box sx={{ width: 54, height: 5, borderRadius: 3, backgroundColor: colors.grey[200] }}>
+                <Box sx={{ width: { xs: 38, sm: 54 }, height: 5, borderRadius: 3, backgroundColor: colors.grey[200] }}>
                   <Box sx={{ width: `${relative * 100}%`, height: '100%', borderRadius: 3, backgroundColor: accent }} />
                 </Box>
                 {showScores && (
@@ -258,15 +262,19 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
         <Typography
           variant="caption"
           sx={{
-            display: 'block',
+            // Two lines on a phone, one on a wide screen. These titles distinguish themselves
+            // late — "Deposition of Matthew Harbaugh, President and CEO of Specialty
+            // Generics…" — so on a 375px column a single ellipsised line named nobody.
+            display: '-webkit-box',
+            WebkitLineClamp: { xs: 2, md: 1 },
+            WebkitBoxOrient: 'vertical',
             fontWeight: 600,
-            fontSize: '0.72rem',
+            fontSize: { xs: '0.75rem', sm: '0.72rem' },
             lineHeight: 1.3,
             mb: 0.35,
             color: colors.text?.secondary,
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            overflowWrap: 'anywhere',
           }}>
           {result.title || 'Untitled'}
         </Typography>
@@ -275,13 +283,14 @@ export function MultimodalResultCard({ result, showScores, topScore, onSelect }:
           <Typography
             variant="body2"
             sx={{
-              fontSize: '0.95rem',
+              fontSize: { xs: '0.9rem', sm: '0.95rem' },
               lineHeight: 1.45,
               color: colors.text?.primary,
               display: '-webkit-box',
               WebkitLineClamp: 3,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
+              overflowWrap: 'anywhere',
             }}>
             {result.snippet}
           </Typography>

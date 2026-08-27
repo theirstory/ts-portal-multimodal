@@ -57,11 +57,19 @@ export function ExhibitDetailDrawer({ result, query, onClose }: Props) {
               display: 'flex',
               alignItems: 'flex-start',
               gap: 1,
-              p: 2,
+              p: { xs: 1.5, sm: 2 },
+              flexShrink: 0,
               borderBottom: `1px solid ${colors.grey[200]}`,
             }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  lineHeight: 1.3,
+                  // These titles are journal citations and can run to four lines at h6 on a
+                  // phone, which is most of the screen before the page itself gets a look in.
+                  fontSize: { xs: '1rem', sm: '1.25rem' },
+                }}>
                 {result.title || 'Untitled'}
               </Typography>
               <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
@@ -98,7 +106,9 @@ export function ExhibitDetailDrawer({ result, query, onClose }: Props) {
                   {result.archival.batesForPage || result.archival.batesNumber}
                   {result.archival.batesForPageIsDerived ? ' (derived)' : ''}
                   {result.archival.caseNumbers[0] ? ` · ${result.archival.caseNumbers[0]}` : ''}
-                  {result.archival.redactionTypes.length ? ` · redacted: ${result.archival.redactionTypes.join(', ')}` : ''}
+                  {result.archival.redactionTypes.length
+                    ? ` · redacted: ${result.archival.redactionTypes.join(', ')}`
+                    : ''}
                 </Typography>
               )}
             </Box>
@@ -107,7 +117,8 @@ export function ExhibitDetailDrawer({ result, query, onClose }: Props) {
             </IconButton>
           </Box>
 
-          <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+          <Box
+            sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: { xs: 1.5, sm: 2 }, WebkitOverflowScrolling: 'touch' }}>
             {result.imageUrl && (
               <Box
                 sx={{
@@ -117,7 +128,12 @@ export function ExhibitDetailDrawer({ result, query, onClose }: Props) {
                   overflow: 'hidden',
                   backgroundColor: colors.grey[100],
                 }}>
-                <PageImageWithHighlights imageUrl={result.imageUrl} alt={result.title} query={query} mode={result.mode} />
+                <PageImageWithHighlights
+                  imageUrl={result.imageUrl}
+                  alt={result.title}
+                  query={query}
+                  mode={result.mode}
+                />
               </Box>
             )}
 
@@ -129,20 +145,24 @@ export function ExhibitDetailDrawer({ result, query, onClose }: Props) {
               <Typography
                 variant="body2"
                 component="div"
-                sx={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: '0.8rem' }}>
+                sx={{
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                  fontSize: '0.8rem',
+                }}>
                 {highlight(result.snippet, query)}
               </Typography>
             ) : (
               <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                This page has no OCR text. It was retrieved from the image alone, in the same vector space as
-                the transcripts.
+                This page has no OCR text. It was retrieved from the image alone, in the same vector space as the
+                transcripts.
               </Typography>
             )}
 
             <ArchivalRecord result={result} />
           </Box>
 
-          <Box sx={{ p: 2, borderTop: `1px solid ${colors.grey[200]}` }}>
+          <Box sx={{ p: { xs: 1.5, sm: 2 }, flexShrink: 0, borderTop: `1px solid ${colors.grey[200]}` }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
               <Typography variant="caption" color="text.secondary">
                 {result.collectionName}
